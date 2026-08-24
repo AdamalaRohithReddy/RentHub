@@ -54,8 +54,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/auth/**", "/api/email/**").permitAll()
                 // Public Uploads & Static Assets
                 .requestMatchers("/uploads/**").permitAll()
-                // Public Catalog / Category Views
-                .requestMatchers(HttpMethod.GET, "/api/categories/**", "/api/products/**").permitAll()
+                // Public Catalog / Category / Resources Views
+                .requestMatchers(HttpMethod.GET, "/api/categories/**", "/api/products/**", "/api/resources/**").permitAll()
                 // Swagger & OpenAPI Docs
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 // Health Check

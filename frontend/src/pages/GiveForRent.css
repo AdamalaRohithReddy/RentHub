@@ -1,0 +1,9 @@
+/* GiveForRent.css */
+.give-for-rent-container {
+  min-height: calc(100vh - 4rem);
+}
+
+.upload-dropzone:hover {
+  border-color: #10b981;
+  background-color: rgba(15, 23, 42, 0.9);
+}

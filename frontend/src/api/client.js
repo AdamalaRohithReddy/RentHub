@@ -41,6 +41,15 @@ export const api = {
   // Categories & Products
   getCategories: () => client.get('/categories'),
   getProducts: (params) => client.get('/products', { params }),
+
+  // Resources / Give For Rent
+  createResource: (formData) => client.post('/resources', formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }),
+  getResources: () => client.get('/resources'),
+  getResourceById: (id) => client.get(`/resources/${id}`),
 };
 
 export default client;

@@ -43,29 +43,37 @@ CREATE TABLE IF NOT EXISTS phone_otps (
     INDEX idx_phone_otp (phone_number, otp_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- 3. CATEGORIES TABLE
-CREATE TABLE IF NOT EXISTS categories (
+-- 3. RESOURCES TABLE (Give for Rent Items)
+CREATE TABLE IF NOT EXISTS resources (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL UNIQUE,
-    icon VARCHAR(50),
-    description VARCHAR(255)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
--- 4. PRODUCTS / RESOURCES TABLE
-CREATE TABLE IF NOT EXISTS products (
-    id BIGINT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(150) NOT NULL,
-    description TEXT,
-    category_id BIGINT NOT NULL,
-    price_per_day DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    deposit_amount DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
-    item_condition ENUM('NEW', 'LIKE_NEW', 'GOOD', 'FAIR') DEFAULT 'GOOD',
-    location VARCHAR(150),
     owner_id BIGINT NOT NULL,
-    is_available BOOLEAN DEFAULT TRUE,
-    image_url VARCHAR(255),
+    item_name VARCHAR(150) NOT NULL,
+    category VARCHAR(100) NOT NULL,
+    description TEXT NOT NULL,
+    rent_amount DECIMAL(10, 2) NOT NULL,
+    rent_duration_unit VARCHAR(30) NOT NULL,
+    security_deposit DECIMAL(10, 2) DEFAULT 0.00,
+    available_from DATE NOT NULL,
+    available_until DATE NOT NULL,
+    pickup_method VARCHAR(100) NOT NULL,
+    pickup_location VARCHAR(150) NOT NULL,
+    status VARCHAR(30) NOT NULL DEFAULT 'AVAILABLE',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     
-    FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE,
-    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_resource_owner (owner_id),
+    INDEX idx_resource_category (category),
+    INDEX idx_resource_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- 4. RESOURCE IMAGES TABLE (Image URLs & File Names in MySQL)
+CREATE TABLE IF NOT EXISTS resource_images (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    resource_id BIGINT NOT NULL,
+    image_url VARCHAR(255) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    
+    FOREIGN KEY (resource_id) REFERENCES resources(id) ON DELETE CASCADE,
+    INDEX idx_resource_image_resource (resource_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

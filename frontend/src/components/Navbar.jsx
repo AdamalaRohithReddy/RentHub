@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, PhoneCall, Sparkles, LogOut, RefreshCw, Server } from 'lucide-react';
+import { ShieldCheck, PhoneCall, Sparkles, LogOut, RefreshCw, PackagePlus, Home } from 'lucide-react';
 
 export const Navbar = ({ currentView, onNavigate }) => {
   const { user, isAuthenticated, logoutUser } = useAuth();
@@ -26,13 +26,13 @@ export const Navbar = ({ currentView, onNavigate }) => {
           </div>
         </div>
 
-        {/* Right Section: Badges & Profile */}
+        {/* Right Section: Badges, Give for Rent & Profile */}
         <div className="flex items-center gap-3">
           {isAuthenticated && user ? (
             <div className="flex items-center gap-3">
               
               {/* Trust & Verification Badges */}
-              <div className="hidden md:flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-full text-xs">
+              <div className="hidden lg:flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-full text-xs">
                 <div className="flex items-center gap-1 text-emerald-400 font-medium">
                   <ShieldCheck className="w-4 h-4" />
                   <span>KYC {user.kycStatus}</span>
@@ -49,12 +49,32 @@ export const Navbar = ({ currentView, onNavigate }) => {
                 </div>
               </div>
 
-              {/* User Avatar */}
+              {/* + Give for Rent Button */}
+              {currentView !== 'give-for-rent' ? (
+                <button
+                  onClick={() => onNavigate('give-for-rent')}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-brand-600 via-emerald-500 to-teal-500 hover:from-brand-500 hover:to-teal-400 text-white font-bold text-xs shadow-glow hover:shadow-glow-lg transition-all"
+                  title="List a product or tool for rent"
+                >
+                  <PackagePlus className="w-4 h-4" />
+                  <span>+ Give for Rent</span>
+                </button>
+              ) : (
+                <button
+                  onClick={() => onNavigate('home')}
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-200 text-xs font-semibold transition-all"
+                >
+                  <Home className="w-4 h-4" />
+                  <span>Browse Items</span>
+                </button>
+              )}
+
+              {/* User Profile Chip */}
               <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:border-slate-700 px-3 py-1.5 rounded-xl">
                 <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-teal-700 flex items-center justify-center text-xs font-bold text-white uppercase">
                   {user.fullName?.charAt(0) || 'U'}
                 </div>
-                <div className="text-left">
+                <div className="text-left hidden sm:block">
                   <p className="text-xs font-semibold text-slate-200 leading-tight">{user.fullName}</p>
                   <p className="text-[10px] text-slate-400">{user.email}</p>
                 </div>

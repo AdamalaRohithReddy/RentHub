@@ -4,6 +4,7 @@ import { Navbar } from './components/Navbar';
 import { Register } from './pages/Register';
 import { Login } from './pages/Login';
 import { Home } from './pages/Home';
+import { GiveForRent } from './pages/GiveForRent';
 
 const AppContent = () => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -46,7 +47,13 @@ const AppContent = () => {
           />
         )}
 
-        {currentView === 'home' && <Home />}
+        {currentView === 'home' && (
+          <Home onNavigateToGiveForRent={() => setCurrentView('give-for-rent')} />
+        )}
+
+        {currentView === 'give-for-rent' && (
+          <GiveForRent onNavigateToHome={() => setCurrentView('home')} />
+        )}
       </main>
 
       <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
