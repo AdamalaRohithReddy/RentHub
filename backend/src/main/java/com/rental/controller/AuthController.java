@@ -45,9 +45,10 @@ public class AuthController {
     @Operation(summary = "Step 3: Real document-to-input Aadhaar OCR extraction and matching")
     public ResponseEntity<AadhaarVerificationResult> verifyAadhaarOcr(
             @RequestParam("aadhaarNumber") String aadhaarNumber,
-            @RequestParam("aadhaarDoc") MultipartFile aadhaarDoc) {
+            @RequestParam("aadhaarDoc") MultipartFile aadhaarDoc,
+            @RequestParam(value = "ocrExtractedText", required = false) String ocrExtractedText) {
         
-        AadhaarVerificationResult result = aadhaarOcrService.verifyAadhaar(aadhaarDoc, aadhaarNumber);
+        AadhaarVerificationResult result = aadhaarOcrService.verifyAadhaar(aadhaarDoc, aadhaarNumber, ocrExtractedText);
         return ResponseEntity.ok(result);
     }
 
@@ -60,7 +61,8 @@ public class AuthController {
             @RequestParam("password") String password,
             @RequestParam("aadhaarNumber") String aadhaarNumber,
             @RequestParam("aadhaarDoc") MultipartFile aadhaarDoc,
-            @RequestParam("panDoc") MultipartFile panDoc) {
+            @RequestParam("panDoc") MultipartFile panDoc,
+            @RequestParam(value = "ocrExtractedText", required = false) String ocrExtractedText) {
 
         RegisterRequest request = new RegisterRequest();
         request.setFullName(fullName);
@@ -69,7 +71,7 @@ public class AuthController {
         request.setPassword(password);
         request.setAadhaarNumber(aadhaarNumber);
 
-        AuthResponse response = authService.register(request, aadhaarDoc, panDoc);
+        AuthResponse response = authService.register(request, aadhaarDoc, panDoc, ocrExtractedText);
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 

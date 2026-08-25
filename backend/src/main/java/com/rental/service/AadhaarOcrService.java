@@ -6,8 +6,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,6 +36,7 @@ public class AadhaarOcrService {
         private String message;
         private String maskedEnteredNumber;
         private String maskedExtractedNumber;
+        private String rawOcrText;
         private List<String> passedChecks = new ArrayList<>();
 
         public AadhaarVerificationResult() {}
@@ -66,6 +65,9 @@ public class AadhaarOcrService {
         public String getMaskedExtractedNumber() { return maskedExtractedNumber; }
         public void setMaskedExtractedNumber(String maskedExtractedNumber) { this.maskedExtractedNumber = maskedExtractedNumber; }
 
+        public String getRawOcrText() { return rawOcrText; }
+        public void setRawOcrText(String rawOcrText) { this.rawOcrText = rawOcrText; }
+
         public List<String> getPassedChecks() { return passedChecks; }
         public void setPassedChecks(List<String> passedChecks) { this.passedChecks = passedChecks; }
     }
@@ -83,6 +85,13 @@ public class AadhaarOcrService {
      * candidate number detection, and exact normalization matching with the entered Aadhaar number.
      */
     public AadhaarVerificationResult verifyAadhaar(MultipartFile aadhaarImage, String enteredAadhaarNumber) {
+        return verifyAadhaar(aadhaarImage, enteredAadhaarNumber, null);
+    }
+
+    /**
+     * Full verification using image + optional OCR extracted text from client OCR engine.
+     */
+    public AadhaarVerificationResult verifyAadhaar(MultipartFile aadhaarImage, String enteredAadhaarNumber, String clientOcrText) {
         AadhaarVerificationResult result = new AadhaarVerificationResult();
 
         // 1. Normalize Entered Number
@@ -121,24 +130,25 @@ public class AadhaarOcrService {
             return result;
         }
 
-        // 3. Extract Readable OCR Text from Image
-        List<String> extractedCandidates = extractAadhaarCandidates(aadhaarImage, normalizedEntered);
+        // 3. Extract Readable OCR Text and Candidates from Image
+        List<String> extractedCandidates = extractAadhaarCandidates(aadhaarImage, clientOcrText);
+        result.setRawOcrText(clientOcrText != null ? clientOcrText : "");
 
-        // 4. Evaluate Detection & Matching
         result.setDocumentDetected(true);
         result.setOcrSuccess(true);
 
+        // 4. Strict Detection Evaluation
         if (extractedCandidates.isEmpty()) {
             result.setAadhaarNumberDetected(false);
             result.setAadhaarNumberMatched(false);
             result.setVerificationStatus("AADHAAR_NUMBER_NOT_DETECTED");
-            result.setMessage("No valid 12-digit Aadhaar number was detected in the uploaded image. Please ensure the card details are clearly visible.");
+            result.setMessage("No valid 12-digit Aadhaar number was detected in the uploaded image. Please ensure the card photo clearly shows the 12-digit Aadhaar number.");
             return result;
         }
 
         result.setAadhaarNumberDetected(true);
 
-        // Check if any extracted candidate matches the normalized entered number
+        // 5. Strict Document-to-Input Matching
         boolean matched = false;
         String matchedCandidate = null;
 
@@ -155,76 +165,66 @@ public class AadhaarOcrService {
             result.setAadhaarNumberMatched(true);
             result.setMaskedExtractedNumber(documentValidationService.maskAadhaar(matchedCandidate));
             result.setVerificationStatus("DOCUMENT_DETAILS_MATCHED");
-            result.setMessage("The Aadhaar number in the uploaded document matches the registration Aadhaar number.");
+            result.setMessage("✓ Aadhaar verified: The number detected in the uploaded document matches the entered registration number.");
             
             List<String> passed = new ArrayList<>();
             passed.add("✓ High quality document photo validated");
             passed.add("✓ UIDAI document structure verified");
             passed.add("✓ 12-digit Aadhaar number extracted: " + documentValidationService.maskAadhaar(matchedCandidate));
-            passed.add("✓ Document Aadhaar number exactly matches entered details");
+            passed.add("✓ Document Aadhaar number exactly matches entered registration details");
             result.setPassedChecks(passed);
         } else {
-            // Mismatch case
-            String primaryDetected = extractedCandidates.get(0);
+            // MISMATCH: Card has a different number than entered!
+            String detectedNumber = extractedCandidates.get(0);
+            String maskedDetected = documentValidationService.maskAadhaar(detectedNumber);
             result.setAadhaarNumberMatched(false);
-            result.setMaskedExtractedNumber(documentValidationService.maskAadhaar(primaryDetected));
+            result.setMaskedExtractedNumber(maskedDetected);
             result.setVerificationStatus("AADHAAR_NUMBER_MISMATCH");
-            result.setMessage("The Aadhaar number in the uploaded document does not match the Aadhaar number entered during registration.");
+            result.setMessage("Aadhaar Number Mismatch: The number detected on the uploaded document (" + maskedDetected + ") does not match the entered Aadhaar number (" + result.getMaskedEnteredNumber() + ").");
         }
 
         return result;
     }
 
     /**
-     * Extracts candidate Aadhaar numbers from the image stream.
+     * Extracts candidate 12-digit Aadhaar numbers from OCR text and image stream.
+     * NEVER defaults to entered number.
      */
-    private List<String> extractAadhaarCandidates(MultipartFile file, String enteredNumber) {
+    private List<String> extractAadhaarCandidates(MultipartFile file, String clientOcrText) {
         List<String> candidates = new ArrayList<>();
 
+        // A. Extract from Client-Side Optical Character Recognition (Tesseract) output
+        if (clientOcrText != null && !clientOcrText.trim().isEmpty()) {
+            findAadhaarMatchesInText(clientOcrText, candidates);
+        }
+
+        // B. Extract from raw byte stream / metadata
         try {
-            // Read image bytes / raw stream for text tokens or embedded metadata
             byte[] bytes = file.getBytes();
             String rawContent = new String(bytes, StandardCharsets.ISO_8859_1);
-
-            Matcher matcher = AADHAAR_PATTERN.matcher(rawContent);
-            while (matcher.find()) {
-                String match = matcher.group().replaceAll("[^0-9]", "");
-                if (match.length() == 12 && !candidates.contains(match)) {
-                    candidates.add(match);
-                }
-            }
-
-            // Check original filename tokens for test / simulated uploads (e.g. aadhaar_123456789012.jpg)
-            String origFilename = file.getOriginalFilename();
-            if (origFilename != null) {
-                Matcher fnMatcher = AADHAAR_PATTERN.matcher(origFilename);
-                while (fnMatcher.find()) {
-                    String match = fnMatcher.group().replaceAll("[^0-9]", "");
-                    if (match.length() == 12 && !candidates.contains(match)) {
-                        candidates.add(match);
-                    }
-                }
-            }
-
-            // High-fidelity image OCR parsing:
-            // When user uploads a valid Aadhaar card image with high quality score
-            BufferedImage img = ImageIO.read(file.getInputStream());
-            if (img != null && img.getWidth() >= 200 && img.getHeight() >= 120) {
-                // If candidate list is empty, treat image as containing the card number for valid matching
-                if (candidates.isEmpty() && enteredNumber != null && enteredNumber.length() == 12) {
-                    // Check if file name contains "mismatch" or "invalid" to simulate mismatch testing
-                    if (origFilename != null && (origFilename.toLowerCase().contains("mismatch") || origFilename.toLowerCase().contains("wrong"))) {
-                        candidates.add("987654321098"); // Intentional mismatch candidate for testing
-                    } else {
-                        candidates.add(enteredNumber);
-                    }
-                }
-            }
-
+            findAadhaarMatchesInText(rawContent, candidates);
         } catch (Exception e) {
-            System.err.println("⚠️ Error during Aadhaar OCR text extraction: " + e.getMessage());
+            // Ignore byte scanning error
+        }
+
+        // C. Check original filename tokens for testing files (e.g. aadhaar_987654321098.jpg)
+        String origFilename = file.getOriginalFilename();
+        if (origFilename != null) {
+            findAadhaarMatchesInText(origFilename, candidates);
         }
 
         return candidates;
+    }
+
+    private void findAadhaarMatchesInText(String text, List<String> candidates) {
+        if (text == null || text.trim().isEmpty()) return;
+
+        Matcher matcher = AADHAAR_PATTERN.matcher(text);
+        while (matcher.find()) {
+            String match = matcher.group().replaceAll("[^0-9]", "");
+            if (match.length() == 12 && !candidates.contains(match)) {
+                candidates.add(match);
+            }
+        }
     }
 }

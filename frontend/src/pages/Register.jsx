@@ -5,6 +5,7 @@ import {
   Smartphone, RefreshCw, KeyRound, Check, Database, FileCheck, Scan, AlertTriangle, RotateCcw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import Tesseract from 'tesseract.js';
 import { api } from '../api/client';
 
 export const Register = ({ onNavigateToLogin }) => {
@@ -124,7 +125,7 @@ export const Register = ({ onNavigateToLogin }) => {
     }
   };
 
-  // Run Real Aadhaar Document-to-Input Matching
+  // Run Real Optical Character Recognition & Strict Matching
   const verifyAadhaarWithOcr = async (fileToScan, numberToMatch) => {
     const targetFile = fileToScan || aadhaarFile;
     const targetNumber = (numberToMatch || aadhaarNumber).replace(/\s+/g, '');
@@ -140,27 +141,52 @@ export const Register = ({ onNavigateToLogin }) => {
 
     setIsScanningAadhaar(true);
     setErrorMessage(null);
-    setAadhaarScanStepText('Scanning Aadhaar card...');
-
-    // Progress text simulation
-    setTimeout(() => setAadhaarScanStepText('Reading document details...'), 350);
-    setTimeout(() => setAadhaarScanStepText('Comparing Aadhaar number...'), 700);
+    setAadhaarScanStepText('Initializing Optical Character Recognition (OCR)...');
 
     try {
+      let ocrExtractedText = '';
+
+      // 1. Run real Tesseract OCR on image pixels
+      if (targetFile.type.startsWith('image/')) {
+        setAadhaarScanStepText('Scanning Aadhaar card image pixels with OCR...');
+        try {
+          const workerResult = await Tesseract.recognize(
+            targetFile,
+            'eng',
+            {
+              logger: (m) => {
+                if (m.status === 'recognizing text' && m.progress) {
+                  setAadhaarScanStepText(`Reading card details (${Math.round(m.progress * 100)}%)...`);
+                }
+              }
+            }
+          );
+          ocrExtractedText = workerResult?.data?.text || '';
+        } catch (ocrErr) {
+          console.warn('Tesseract client OCR note:', ocrErr);
+        }
+      }
+
+      setAadhaarScanStepText('Verifying detected document numbers with entered details...');
+
       const formData = new FormData();
       formData.append('aadhaarNumber', targetNumber);
       formData.append('aadhaarDoc', targetFile);
+      if (ocrExtractedText) {
+        formData.append('ocrExtractedText', ocrExtractedText);
+      }
 
       const res = await api.verifyAadhaarOcr(formData);
       const result = res.data;
+      result.rawOcrText = ocrExtractedText;
       setAadhaarOcrResult(result);
 
       if (result.aadhaarNumberMatched) {
         setAadhaarNumberMatched(true);
-        setSuccessMessage('✓ Aadhaar document verified! Number matches entered details.');
+        setSuccessMessage('✓ Aadhaar document verified! Number matches registration details.');
       } else {
         setAadhaarNumberMatched(false);
-        setErrorMessage(result.message || 'Aadhaar verification failed. Please check the uploaded photo.');
+        setErrorMessage(result.message || 'Aadhaar verification failed. The number in the uploaded photo does not match.');
       }
     } catch (err) {
       console.error('Aadhaar OCR verification error:', err);
@@ -330,7 +356,7 @@ export const Register = ({ onNavigateToLogin }) => {
     }
 
     if (!aadhaarNumberMatched) {
-      setErrorMessage('Aadhaar verification is required. Please click "Verify Aadhaar" to verify your document.');
+      setErrorMessage('Aadhaar verification is required. The uploaded photo must match your entered 12-digit Aadhaar number.');
       return;
     }
 
@@ -362,6 +388,9 @@ export const Register = ({ onNavigateToLogin }) => {
       formData.append('aadhaarNumber', cleanAadhaar);
       formData.append('aadhaarDoc', aadhaarFile);
       formData.append('panDoc', panFile);
+      if (aadhaarOcrResult?.rawOcrText) {
+        formData.append('ocrExtractedText', aadhaarOcrResult.rawOcrText);
+      }
 
       const res = await api.register(formData);
 
@@ -732,7 +761,7 @@ export const Register = ({ onNavigateToLogin }) => {
           )}
 
           {/* ========================================================= */}
-          {/* STEP 3: IDENTITY VERIFICATION (KYC & OCR MATCHING) */}
+          {/* STEP 3: IDENTITY VERIFICATION (KYC & STRICT OCR MATCHING) */}
           {/* ========================================================= */}
           {currentStep === 3 && (
             <form onSubmit={handleProceedToStep4} className="space-y-5 animate-fade-in">
@@ -839,13 +868,13 @@ export const Register = ({ onNavigateToLogin }) => {
                 </div>
               </div>
 
-              {/* Real-Time Aadhaar OCR Verification Box */}
+              {/* Real-Time Aadhaar OCR Verification Scanning Status */}
               {isScanningAadhaar && (
                 <div className="p-4 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center gap-3 text-xs text-brand-300 animate-fade-in">
                   <RefreshCw className="w-5 h-5 text-brand-400 animate-spin flex-shrink-0" />
                   <div className="space-y-0.5">
                     <p className="font-bold text-white">{aadhaarScanStepText}</p>
-                    <p className="text-slate-400">Verifying document clarity, UIDAI structure, and 12-digit number</p>
+                    <p className="text-slate-400">Verifying document clarity, optical character text, and matching 12-digit number</p>
                   </div>
                 </div>
               )}
@@ -866,7 +895,7 @@ export const Register = ({ onNavigateToLogin }) => {
                       )}
                       <div>
                         <h4 className="text-xs font-bold uppercase tracking-wider text-white">
-                          {aadhaarNumberMatched ? '✓ Aadhaar Document Verified' : '✗ Aadhaar Number Mismatch'}
+                          {aadhaarNumberMatched ? '✓ Aadhaar Document Verified' : '✗ Aadhaar Number Mismatch / Not Found'}
                         </h4>
                         <p className="text-[11px] mt-0.5 opacity-90">{aadhaarOcrResult.message}</p>
                       </div>
@@ -904,7 +933,7 @@ export const Register = ({ onNavigateToLogin }) => {
                   className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 border border-brand-500/40 text-brand-300 font-semibold py-2.5 px-4 rounded-xl transition-all text-xs"
                 >
                   <Scan className="w-4 h-4 text-brand-400" />
-                  <span>[ 🔍 VERIFY AADHAAR CARD OCR ]</span>
+                  <span>[ 🔍 RUN OCR DOCUMENT-TO-INPUT VERIFICATION ]</span>
                 </button>
               )}
 
@@ -921,7 +950,7 @@ export const Register = ({ onNavigateToLogin }) => {
 
                 <button
                   type="submit"
-                  disabled={!aadhaarNumberMatched || !panFile}
+                  disabled={!aadhaarNumberMatched || !panFile || isScanningAadhaar}
                   className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl shadow-glow hover:shadow-glow-lg transition-all text-sm tracking-wide"
                 >
                   <span>Next: Review &amp; Database Save</span>

@@ -104,9 +104,14 @@ public class AuthService {
         return new ApiResponse(true, "Phone and Email successfully verified!");
     }
 
-    // 3. Register & Save to MySQL (Step 4) with Real Document-to-Input Matching
+    // 3. Register & Save to MySQL (Step 4) with Strict Document-to-Input Matching
     @Transactional
     public AuthResponse register(RegisterRequest req, MultipartFile aadhaarDoc, MultipartFile panDoc) {
+        return register(req, aadhaarDoc, panDoc, null);
+    }
+
+    @Transactional
+    public AuthResponse register(RegisterRequest req, MultipartFile aadhaarDoc, MultipartFile panDoc, String ocrExtractedText) {
         String cleanEmail = req.getEmail().trim().toLowerCase();
         String cleanPhone = req.getPhoneNumber().trim();
         String cleanAadhaar = aadhaarOcrService.normalizeAadhaarNumber(req.getAadhaarNumber());
@@ -131,8 +136,8 @@ public class AuthService {
             throw new BadRequestException("PAN card document photo is mandatory for KYC.");
         }
 
-        // REAL AADHAAR OCR VERIFICATION & DOCUMENT-TO-INPUT MATCHING
-        AadhaarVerificationResult ocrResult = aadhaarOcrService.verifyAadhaar(aadhaarDoc, cleanAadhaar);
+        // REAL AADHAAR OCR VERIFICATION & STRICT DOCUMENT-TO-INPUT MATCHING
+        AadhaarVerificationResult ocrResult = aadhaarOcrService.verifyAadhaar(aadhaarDoc, cleanAadhaar, ocrExtractedText);
         if (!ocrResult.isAadhaarNumberMatched()) {
             throw new BadRequestException("Aadhaar verification failed: " + ocrResult.getMessage());
         }
