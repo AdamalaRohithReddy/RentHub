@@ -1,8 +1,12 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, PhoneCall, Sparkles, LogOut, RefreshCw, PackagePlus, Home } from 'lucide-react';
+import { 
+  ShieldCheck, PhoneCall, Sparkles, LogOut, RefreshCw, 
+  PackagePlus, Home, ShoppingBag, Package, User 
+} from 'lucide-react';
+import { NotificationBell } from './NotificationBell';
 
-export const Navbar = ({ currentView, onNavigate }) => {
+export const Navbar = ({ currentView, onNavigate, onNavigateToOrdersTab }) => {
   const { user, isAuthenticated, logoutUser } = useAuth();
 
   return (
@@ -26,16 +30,16 @@ export const Navbar = ({ currentView, onNavigate }) => {
           </div>
         </div>
 
-        {/* Right Section: Badges, Give for Rent & Profile */}
-        <div className="flex items-center gap-3">
+        {/* Right Section: Badges, Notification Bell, Orders, Profile & Logout */}
+        <div className="flex items-center gap-2 sm:gap-3">
           {isAuthenticated && user ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               
               {/* Trust & Verification Badges */}
-              <div className="hidden lg:flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-full text-xs">
+              <div className="hidden xl:flex items-center gap-2 bg-slate-900/90 border border-slate-800 px-3 py-1.5 rounded-full text-xs">
                 <div className="flex items-center gap-1 text-emerald-400 font-medium">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>KYC {user.kycStatus}</span>
+                  <span>KYC {user.kycStatus || 'VERIFIED'}</span>
                 </div>
                 <span className="text-slate-600">•</span>
                 <div className="flex items-center gap-1 text-blue-400">
@@ -49,6 +53,34 @@ export const Navbar = ({ currentView, onNavigate }) => {
                 </div>
               </div>
 
+              {/* My Products Button */}
+              <button
+                onClick={() => onNavigate('my-products')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                  currentView === 'my-products' || currentView === 'edit-product'
+                    ? 'bg-brand-500/20 border-brand-400 text-brand-300'
+                    : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white'
+                }`}
+                title="View and edit products you have listed"
+              >
+                <Package className="w-4 h-4 text-emerald-400" />
+                <span className="hidden md:inline">My Products</span>
+              </button>
+
+              {/* My Orders Button */}
+              <button
+                onClick={() => onNavigate('my-orders')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                  currentView === 'my-orders'
+                    ? 'bg-brand-500/20 border-brand-400 text-brand-300'
+                    : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white'
+                }`}
+                title="View your rental requests and received orders"
+              >
+                <ShoppingBag className="w-4 h-4 text-brand-400" />
+                <span className="hidden md:inline">My Orders</span>
+              </button>
+
               {/* + Give for Rent Button */}
               {currentView !== 'give-for-rent' ? (
                 <button
@@ -57,7 +89,8 @@ export const Navbar = ({ currentView, onNavigate }) => {
                   title="List a product or tool for rent"
                 >
                   <PackagePlus className="w-4 h-4" />
-                  <span>+ Give for Rent</span>
+                  <span className="hidden sm:inline">+ Give for Rent</span>
+                  <span className="sm:hidden">+ Rent</span>
                 </button>
               ) : (
                 <button
@@ -69,16 +102,42 @@ export const Navbar = ({ currentView, onNavigate }) => {
                 </button>
               )}
 
-              {/* User Profile Chip */}
-              <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 hover:border-slate-700 px-3 py-1.5 rounded-xl">
-                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-500 to-teal-700 flex items-center justify-center text-xs font-bold text-white uppercase">
-                  {user.fullName?.charAt(0) || 'U'}
+              {/* In-App Notification Bell */}
+              <NotificationBell onNavigateToOrdersTab={onNavigateToOrdersTab} />
+
+              {/* User Profile Button / Chip */}
+              <button
+                type="button"
+                onClick={() => onNavigate('profile')}
+                className={`flex items-center gap-2 px-2.5 py-1.5 rounded-xl border transition-all ${
+                  currentView === 'profile' || currentView === 'edit-profile'
+                    ? 'bg-brand-500/20 border-brand-400 text-brand-300 ring-1 ring-brand-400/40 shadow-glow'
+                    : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-200 hover:text-white'
+                }`}
+                title="View and manage your profile"
+              >
+                <div className="w-7 h-7 rounded-lg overflow-hidden bg-gradient-to-br from-brand-500 to-teal-700 flex items-center justify-center text-xs font-bold text-white uppercase flex-shrink-0">
+                  {user.profileImageUrl ? (
+                    <img
+                      src={user.profileImageUrl}
+                      alt={user.fullName || 'User'}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    <span>{user.fullName?.charAt(0) || 'U'}</span>
+                  )}
                 </div>
-                <div className="text-left hidden sm:block">
-                  <p className="text-xs font-semibold text-slate-200 leading-tight">{user.fullName}</p>
-                  <p className="text-[10px] text-slate-400">{user.email}</p>
+                
+                <div className="text-left hidden lg:block pr-1">
+                  <p className="text-xs font-semibold leading-tight truncate max-w-[110px]">
+                    {user.fullName || 'My Profile'}
+                  </p>
+                  <p className="text-[10px] text-slate-400">👤 Profile</p>
                 </div>
-              </div>
+              </button>
 
               {/* Logout Button */}
               <button

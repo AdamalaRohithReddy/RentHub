@@ -2,6 +2,8 @@ package com.rental.controller;
 
 import com.rental.dto.AuthDTO.*;
 import com.rental.security.UserPrincipal;
+import com.rental.service.AadhaarOcrService;
+import com.rental.service.AadhaarOcrService.AadhaarVerificationResult;
 import com.rental.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -16,11 +18,14 @@ import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/auth")
-@Tag(name = "Authentication & KYC", description = "Endpoints for OTP verification, KYC registration, and login")
+@Tag(name = "Authentication & KYC", description = "Endpoints for OTP verification, KYC registration, Aadhaar OCR matching, and login")
 public class AuthController {
 
     @Autowired
     private AuthService authService;
+
+    @Autowired
+    private AadhaarOcrService aadhaarOcrService;
 
     @PostMapping("/send-otp")
     @Operation(summary = "Step 2: Dispatch 6-digit SMS OTP to phone number")
@@ -34,6 +39,16 @@ public class AuthController {
     public ResponseEntity<ApiResponse> verifyOtp(@Valid @RequestBody VerifyOtpRequest request) {
         ApiResponse response = authService.verifyOtp(request);
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping(value = "/verify-aadhaar-ocr", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Step 3: Real document-to-input Aadhaar OCR extraction and matching")
+    public ResponseEntity<AadhaarVerificationResult> verifyAadhaarOcr(
+            @RequestParam("aadhaarNumber") String aadhaarNumber,
+            @RequestParam("aadhaarDoc") MultipartFile aadhaarDoc) {
+        
+        AadhaarVerificationResult result = aadhaarOcrService.verifyAadhaar(aadhaarDoc, aadhaarNumber);
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping(value = "/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -59,7 +74,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    @Operation(summary = "Authenticate user via Email/Phone and Password")
+    @Operation(summary = "Authenticate user via email or phone")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.login(request);
         return ResponseEntity.ok(response);
@@ -68,10 +83,7 @@ public class AuthController {
     @GetMapping("/me")
     @Operation(summary = "Get current authenticated user profile")
     public ResponseEntity<UserProfileResponse> getCurrentUser(@AuthenticationPrincipal UserPrincipal currentUser) {
-        if (currentUser == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
-        }
-        UserProfileResponse profile = authService.getUserProfile(currentUser.getId());
-        return ResponseEntity.ok(profile);
+        UserProfileResponse response = authService.getCurrentUserProfile(currentUser);
+        return ResponseEntity.ok(response);
     }
 }

@@ -34,7 +34,7 @@ public class User {
     @Column(nullable = false, length = 20)
     private String aadhaarNumber;
 
-    @Column(length = 255)
+    @Column(length = 255, nullable = false)
     private String aadhaarDocPath;
 
     @Column(length = 255)
@@ -50,6 +50,22 @@ public class User {
 
     @Column(nullable = false)
     private Integer trustScore = 100;
+
+    // Profile Details
+    @Column(length = 255)
+    private String profileImageUrl;
+
+    @Column(length = 255)
+    private String address;
+
+    @Column(length = 100)
+    private String city;
+
+    @Column(length = 100)
+    private String state;
+
+    @Column(length = 20)
+    private String pincode;
 
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -116,6 +132,21 @@ public class User {
 
     public Integer getTrustScore() { return trustScore; }
     public void setTrustScore(Integer trustScore) { this.trustScore = trustScore; }
+
+    public String getProfileImageUrl() { return profileImageUrl; }
+    public void setProfileImageUrl(String profileImageUrl) { this.profileImageUrl = profileImageUrl; }
+
+    public String getAddress() { return address; }
+    public void setAddress(String address) { this.address = address; }
+
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+
+    public String getState() { return state; }
+    public void setState(String state) { this.state = state; }
+
+    public String getPincode() { return pincode; }
+    public void setPincode(String pincode) { this.pincode = pincode; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

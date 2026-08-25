@@ -42,6 +42,15 @@ public class Resource {
     @Column(name = "security_deposit", precision = 10, scale = 2)
     private BigDecimal securityDeposit = BigDecimal.ZERO;
 
+    @Column(name = "total_quantity", nullable = false)
+    private Integer totalQuantity = 1;
+
+    @Column(name = "available_quantity", nullable = false)
+    private Integer availableQuantity = 1;
+
+    @Column(name = "rented_quantity", nullable = false)
+    private Integer rentedQuantity = 0;
+
     @Column(name = "available_from", nullable = false)
     private LocalDate availableFrom;
 
@@ -54,8 +63,14 @@ public class Resource {
     @Column(name = "pickup_location", nullable = false, length = 150)
     private String pickupLocation;
 
+    @Column(name = "pickup_instructions", length = 500)
+    private String pickupInstructions;
+
+    @Column(name = "return_instructions", length = 500)
+    private String returnInstructions;
+
     @Column(nullable = false, length = 30)
-    private String status = "AVAILABLE"; // "AVAILABLE", "RENTED", "PAUSED"
+    private String status = "AVAILABLE"; // "AVAILABLE", "PARTIALLY_RENTED", "FULLY_RENTED", "UNAVAILABLE", "OUT_OF_STOCK"
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -64,12 +79,16 @@ public class Resource {
     @JsonManagedReference
     private List<ResourceImage> images = new ArrayList<>();
 
+    @OneToOne(mappedBy = "resource", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @JsonManagedReference
+    private ProductConditionScan conditionScan;
+
     public Resource() {}
 
     public Resource(User owner, String itemName, String category, String description,
                     BigDecimal rentAmount, String rentDurationUnit, BigDecimal securityDeposit,
-                    LocalDate availableFrom, LocalDate availableUntil, String pickupMethod,
-                    String pickupLocation) {
+                    Integer availableQuantity, LocalDate availableFrom, LocalDate availableUntil,
+                    String pickupMethod, String pickupLocation) {
         this.owner = owner;
         this.itemName = itemName;
         this.category = category;
@@ -77,6 +96,9 @@ public class Resource {
         this.rentAmount = rentAmount;
         this.rentDurationUnit = rentDurationUnit;
         this.securityDeposit = securityDeposit != null ? securityDeposit : BigDecimal.ZERO;
+        this.totalQuantity = availableQuantity != null ? availableQuantity : 1;
+        this.availableQuantity = availableQuantity != null ? availableQuantity : 1;
+        this.rentedQuantity = 0;
         this.availableFrom = availableFrom;
         this.availableUntil = availableUntil;
         this.pickupMethod = pickupMethod;
@@ -120,6 +142,15 @@ public class Resource {
     public BigDecimal getSecurityDeposit() { return securityDeposit; }
     public void setSecurityDeposit(BigDecimal securityDeposit) { this.securityDeposit = securityDeposit; }
 
+    public Integer getTotalQuantity() { return totalQuantity; }
+    public void setTotalQuantity(Integer totalQuantity) { this.totalQuantity = totalQuantity; }
+
+    public Integer getAvailableQuantity() { return availableQuantity; }
+    public void setAvailableQuantity(Integer availableQuantity) { this.availableQuantity = availableQuantity; }
+
+    public Integer getRentedQuantity() { return rentedQuantity; }
+    public void setRentedQuantity(Integer rentedQuantity) { this.rentedQuantity = rentedQuantity; }
+
     public LocalDate getAvailableFrom() { return availableFrom; }
     public void setAvailableFrom(LocalDate availableFrom) { this.availableFrom = availableFrom; }
 
@@ -132,6 +163,12 @@ public class Resource {
     public String getPickupLocation() { return pickupLocation; }
     public void setPickupLocation(String pickupLocation) { this.pickupLocation = pickupLocation; }
 
+    public String getPickupInstructions() { return pickupInstructions; }
+    public void setPickupInstructions(String pickupInstructions) { this.pickupInstructions = pickupInstructions; }
+
+    public String getReturnInstructions() { return returnInstructions; }
+    public void setReturnInstructions(String returnInstructions) { this.returnInstructions = returnInstructions; }
+
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 
@@ -140,4 +177,7 @@ public class Resource {
 
     public List<ResourceImage> getImages() { return images; }
     public void setImages(List<ResourceImage> images) { this.images = images; }
+
+    public ProductConditionScan getConditionScan() { return conditionScan; }
+    public void setConditionScan(ProductConditionScan conditionScan) { this.conditionScan = conditionScan; }
 }

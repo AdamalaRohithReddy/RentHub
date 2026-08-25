@@ -42,6 +42,14 @@ export const AuthProvider = ({ children }) => {
     setUser(newUser);
   };
 
+  const updateUserInState = (updatedUser) => {
+    setUser((prev) => {
+      const merged = { ...prev, ...updatedUser };
+      localStorage.setItem('renthub_user', JSON.stringify(merged));
+      return merged;
+    });
+  };
+
   const logoutUser = () => {
     localStorage.removeItem('renthub_token');
     localStorage.removeItem('renthub_user');
@@ -57,6 +65,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated: !!user && !!token,
         isLoading,
         loginUser,
+        updateUserInState,
         logoutUser,
       }}
     >

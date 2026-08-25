@@ -23,7 +23,7 @@ const CATEGORY_FILTERS = [
   'Other'
 ];
 
-export const Home = ({ onNavigateToGiveForRent }) => {
+export const Home = ({ onNavigateToGiveForRent, onSelectProduct }) => {
   const { user } = useAuth();
   const [resources, setResources] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -289,7 +289,11 @@ export const Home = ({ onNavigateToGiveForRent }) => {
         {!isLoading && filteredResources.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {filteredResources.map((item) => (
-              <ProductCard key={item.id} product={item} />
+              <ProductCard 
+                key={item.id} 
+                product={item} 
+                onClick={(id) => onSelectProduct && onSelectProduct(id)}
+              />
             ))}
           </div>
         )}

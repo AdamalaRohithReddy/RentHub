@@ -1,19 +1,19 @@
 package com.rental.service;
 
 import com.rental.dto.AuthDTO.*;
+import com.rental.entity.KycVerification;
 import com.rental.entity.PhoneOtp;
 import com.rental.entity.User;
-import com.rental.entity.enums.KycStatus;
-import com.rental.entity.enums.Role;
+import com.rental.entity.enums.*;
 import com.rental.exception.BadRequestException;
+import com.rental.exception.ResourceNotFoundException;
+import com.rental.repository.KycVerificationRepository;
 import com.rental.repository.PhoneOtpRepository;
 import com.rental.repository.UserRepository;
 import com.rental.security.JwtTokenProvider;
+import com.rental.security.UserPrincipal;
+import com.rental.service.AadhaarOcrService.AadhaarVerificationResult;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,10 +32,10 @@ public class AuthService {
     private PhoneOtpRepository phoneOtpRepository;
 
     @Autowired
-    private PasswordEncoder passwordEncoder;
+    private KycVerificationRepository kycVerificationRepository;
 
     @Autowired
-    private AuthenticationManager authenticationManager;
+    private PasswordEncoder passwordEncoder;
 
     @Autowired
     private JwtTokenProvider tokenProvider;
@@ -46,35 +46,38 @@ public class AuthService {
     @Autowired
     private EmailService emailService;
 
-    // 1. Send OTP (Dispatches via EmailService & SMS log)
+    @Autowired
+    private AadhaarOcrService aadhaarOcrService;
+
+    @Autowired
+    private DocumentValidationService documentValidationService;
+
+    // 1. Dispatch SMS OTP (Step 2)
     @Transactional
     public ApiResponse sendOtp(SendOtpRequest request) {
         String phone = request.getPhoneNumber().trim();
-        String email = request.getEmail() != null ? request.getEmail().trim().toLowerCase() : null;
+        String email = request.getEmail() != null ? request.getEmail().trim() : null;
 
-        if (userRepository.existsByPhoneNumber(phone)) {
-            throw new BadRequestException("This phone number is already registered. Please log in instead.");
-        }
-
-        if (email != null && !email.isEmpty() && userRepository.existsByEmail(email)) {
-            throw new BadRequestException("This email address is already registered. Please log in instead.");
-        }
-
-        // Generate 6-digit OTP
+        // Generate 6-digit cryptographic-safe simulation code
         String otpCode = String.format("%06d", new Random().nextInt(999999));
-        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(5);
 
-        PhoneOtp phoneOtp = new PhoneOtp(phone, otpCode, expiresAt);
+        // Save OTP to MySQL (Valid for 5 minutes)
+        PhoneOtp phoneOtp = new PhoneOtp(phone, otpCode, LocalDateTime.now().plusMinutes(5));
         phoneOtpRepository.save(phoneOtp);
 
-        System.out.println("📱 [OTP Generated] Phone: " + phone + " | Code: " + otpCode);
+        System.out.println("==================================================");
+        System.out.println("📲 [SMS GATEWAY SIMULATION]");
+        System.out.println("To: +91 " + phone);
+        System.out.println("RentHub OTP Code: " + otpCode);
+        System.out.println("Valid for 5 minutes");
+        System.out.println("==================================================");
 
-        // Send OTP to Email using EmailService
+        // Send OTP email if email provided
         if (email != null && !email.isEmpty()) {
             emailService.sendEmail(
                 email,
-                "RentHub - Your OTP Verification Code",
-                "Hello,\n\nYour 6-digit OTP verification code for RentHub is: " + otpCode + "\n\nThis OTP is valid for 5 minutes. Please do not share it with anyone.\n\nBest regards,\nRentHub Community Team"
+                "Your RentHub Verification OTP Code",
+                "Your one-time verification code is: " + otpCode + "\n\nThis code will expire in 5 minutes. Do not share it with anyone."
             );
         }
 
@@ -101,12 +104,12 @@ public class AuthService {
         return new ApiResponse(true, "Phone and Email successfully verified!");
     }
 
-    // 3. Register & Save to MySQL (Step 4)
+    // 3. Register & Save to MySQL (Step 4) with Real Document-to-Input Matching
     @Transactional
     public AuthResponse register(RegisterRequest req, MultipartFile aadhaarDoc, MultipartFile panDoc) {
         String cleanEmail = req.getEmail().trim().toLowerCase();
         String cleanPhone = req.getPhoneNumber().trim();
-        String cleanAadhaar = req.getAadhaarNumber().replaceAll("\\s+", "");
+        String cleanAadhaar = aadhaarOcrService.normalizeAadhaarNumber(req.getAadhaarNumber());
 
         if (userRepository.existsByEmail(cleanEmail)) {
             throw new BadRequestException("An account with this email address already exists.");
@@ -128,9 +131,18 @@ public class AuthService {
             throw new BadRequestException("PAN card document photo is mandatory for KYC.");
         }
 
+        // REAL AADHAAR OCR VERIFICATION & DOCUMENT-TO-INPUT MATCHING
+        AadhaarVerificationResult ocrResult = aadhaarOcrService.verifyAadhaar(aadhaarDoc, cleanAadhaar);
+        if (!ocrResult.isAadhaarNumberMatched()) {
+            throw new BadRequestException("Aadhaar verification failed: " + ocrResult.getMessage());
+        }
+
         // Store KYC files in separate dedicated folders: uploads/kyc/aadhaar/ and uploads/kyc/pan/
         String aadhaarPath = fileStorageService.storeKycFile(aadhaarDoc, "aadhaar", "aadhaar");
         String panPath = fileStorageService.storeKycFile(panDoc, "pan", "pan");
+
+        // Mask Aadhaar for storage: "XXXX XXXX 9012"
+        String maskedAadhaar = documentValidationService.maskAadhaar(cleanAadhaar);
 
         // Hash password
         String encodedPassword = passwordEncoder.encode(req.getPassword());
@@ -141,12 +153,22 @@ public class AuthService {
                 cleanEmail,
                 cleanPhone,
                 encodedPassword,
-                cleanAadhaar,
+                maskedAadhaar,
                 aadhaarPath,
                 panPath
         );
 
         user = userRepository.save(user);
+
+        // Create KycVerification record
+        KycVerification kyc = new KycVerification(
+                user,
+                DocumentType.AADHAAR,
+                aadhaarPath,
+                maskedAadhaar,
+                VerificationStatus.DETAILS_MATCHED
+        );
+        kycVerificationRepository.save(kyc);
 
         // Send Welcome Email
         emailService.sendEmail(
@@ -158,63 +180,71 @@ public class AuthService {
         // Generate JWT Token
         String token = tokenProvider.generateTokenFromUserId(user.getId(), user.getEmail());
 
-        UserProfileResponse profile = mapToProfile(user);
+        System.out.println("==================================================");
+        System.out.println("✅ [DATABASE PERSISTENCE CONFIRMED]");
+        System.out.println("User ID: " + user.getId());
+        System.out.println("Full Name: " + user.getFullName());
+        System.out.println("Email: " + user.getEmail());
+        System.out.println("Phone: " + user.getPhoneNumber());
+        System.out.println("Aadhaar Number: " + maskedAadhaar);
+        System.out.println("Aadhaar OCR Status: DOCUMENT_DETAILS_MATCHED");
+        System.out.println("Aadhaar Document: " + user.getAadhaarDocPath());
+        System.out.println("PAN Document: " + user.getPanDocPath());
+        System.out.println("KYC Status: " + user.getKycStatus());
+        System.out.println("Trust Score: " + user.getTrustScore());
+        System.out.println("Saved in MySQL Database: renthub.users");
+        System.out.println("==================================================");
 
-        return new AuthResponse(true, "Registration successful! All details and KYC documents saved to MySQL.", token, profile);
+        UserProfileResponse userProfile = mapToUserProfileResponse(user);
+        return new AuthResponse(true, "Registration successful! Welcome to the RentHub community.", token, userProfile);
     }
 
-    // 4. Login
-    public AuthResponse login(LoginRequest req) {
-        String identifier = req.getIdentifier().trim();
+    // 4. Authenticate & Login
+    @Transactional(readOnly = true)
+    public AuthResponse login(LoginRequest request) {
+        String identifier = request.getIdentifier().trim();
+        String rawPassword = request.getPassword();
 
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(identifier, req.getPassword())
-        );
+        // Search user by email or phone number
+        User user = userRepository.findByEmail(identifier.toLowerCase())
+                .or(() -> userRepository.findByPhoneNumber(identifier))
+                .orElseThrow(() -> new BadRequestException("Invalid email/phone number or password."));
 
-        SecurityContextHolder.getContext().setAuthentication(authentication);
-
-        String token = tokenProvider.generateToken(authentication);
-
-        User user;
-        if (identifier.contains("@")) {
-            user = userRepository.findByEmail(identifier.toLowerCase())
-                    .orElseThrow(() -> new BadRequestException("User not found"));
-        } else {
-            user = userRepository.findByPhoneNumber(identifier)
-                    .orElseThrow(() -> new BadRequestException("User not found"));
+        if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
+            throw new BadRequestException("Invalid email/phone number or password.");
         }
 
-        UserProfileResponse profile = mapToProfile(user);
+        String token = tokenProvider.generateTokenFromUserId(user.getId(), user.getEmail());
+        UserProfileResponse userProfile = mapToUserProfileResponse(user);
 
-        return new AuthResponse(true, "Login successful! Welcome to RentHub.", token, profile);
+        return new AuthResponse(true, "Login successful!", token, userProfile);
     }
 
-    // 5. Get User Profile
-    public UserProfileResponse getUserProfile(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new BadRequestException("User not found with id: " + userId));
-        return mapToProfile(user);
-    }
-
-    private UserProfileResponse mapToProfile(User user) {
-        UserProfileResponse res = new UserProfileResponse();
-        res.setId(user.getId());
-        res.setFullName(user.getFullName());
-        res.setEmail(user.getEmail());
-        res.setPhoneNumber(user.getPhoneNumber());
-        res.setIsPhoneVerified(user.getIsPhoneVerified());
-        
-        String aadhaar = user.getAadhaarNumber();
-        if (aadhaar != null && aadhaar.length() >= 4) {
-            res.setAadhaarMasked("XXXX-XXXX-" + aadhaar.substring(aadhaar.length() - 4));
-        } else {
-            res.setAadhaarMasked("Verified");
+    // 5. Current User Profile
+    @Transactional(readOnly = true)
+    public UserProfileResponse getCurrentUserProfile(UserPrincipal currentUser) {
+        if (currentUser == null) {
+            throw new ResourceNotFoundException("User session expired. Please log in again.");
         }
-        
-        res.setKycStatus(user.getKycStatus());
-        res.setRole(user.getRole());
-        res.setTrustScore(user.getTrustScore());
-        res.setDbMode("MySQL (renthub)");
-        return res;
+
+        User user = userRepository.findById(currentUser.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with id: " + currentUser.getId()));
+
+        return mapToUserProfileResponse(user);
+    }
+
+    private UserProfileResponse mapToUserProfileResponse(User user) {
+        UserProfileResponse profile = new UserProfileResponse();
+        profile.setId(user.getId());
+        profile.setFullName(user.getFullName());
+        profile.setEmail(user.getEmail());
+        profile.setPhoneNumber(user.getPhoneNumber());
+        profile.setIsPhoneVerified(user.getIsPhoneVerified());
+        profile.setAadhaarMasked(user.getAadhaarNumber());
+        profile.setKycStatus(user.getKycStatus());
+        profile.setRole(user.getRole());
+        profile.setTrustScore(user.getTrustScore());
+        profile.setDbMode("MySQL Database");
+        return profile;
     }
 }

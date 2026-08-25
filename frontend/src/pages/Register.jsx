@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   User, Mail, Phone, Lock, Eye, EyeOff, CheckCircle2, AlertCircle, 
   ArrowRight, ArrowLeft, ShieldCheck, FileText, Upload, Sparkles,
-  Smartphone, RefreshCw, KeyRound, Check, Database, FileCheck
+  Smartphone, RefreshCw, KeyRound, Check, Database, FileCheck, Scan, AlertTriangle, RotateCcw
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { api } from '../api/client';
@@ -29,12 +29,18 @@ export const Register = ({ onNavigateToLogin }) => {
   const [isOtpVerified, setIsOtpVerified] = useState(false);
   const otpInputRefs = useRef([]);
 
-  // Step 3: Identity Verification (KYC)
+  // Step 3: Identity Verification (KYC) & Aadhaar OCR
   const [aadhaarNumber, setAadhaarNumber] = useState('');
   const [aadhaarFile, setAadhaarFile] = useState(null);
   const [panFile, setPanFile] = useState(null);
   const [aadhaarPreview, setAadhaarPreview] = useState(null);
   const [panPreview, setPanPreview] = useState(null);
+
+  // Real Aadhaar Document-to-Input Matching States
+  const [isScanningAadhaar, setIsScanningAadhaar] = useState(false);
+  const [aadhaarScanStepText, setAadhaarScanStepText] = useState('Scanning Aadhaar card...');
+  const [aadhaarOcrResult, setAadhaarOcrResult] = useState(null);
+  const [aadhaarNumberMatched, setAadhaarNumberMatched] = useState(false);
 
   // General State
   const [isLoading, setIsLoading] = useState(false);
@@ -73,15 +79,21 @@ export const Register = ({ onNavigateToLogin }) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 12);
     const formatted = raw.replace(/(\d{4})(?=\d)/g, '$1 ');
     setAadhaarNumber(formatted);
+    // Reset OCR verification when number changes
+    setAadhaarOcrResult(null);
+    setAadhaarNumberMatched(false);
   };
 
-  // Document File Previews
+  // Document File Previews & Trigger Aadhaar OCR
   const handleAadhaarFileUpload = (file) => {
-    if (file.size > 5 * 1024 * 1024) {
-      setErrorMessage('Aadhaar document exceeds 5MB size limit.');
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMessage('Aadhaar document exceeds 10MB size limit.');
       return;
     }
     setAadhaarFile(file);
+    setAadhaarOcrResult(null);
+    setAadhaarNumberMatched(false);
+
     if (file.type.startsWith('image/')) {
       const reader = new FileReader();
       reader.onload = () => setAadhaarPreview(reader.result);
@@ -89,11 +101,17 @@ export const Register = ({ onNavigateToLogin }) => {
     } else {
       setAadhaarPreview(null);
     }
+
+    // If 12-digit number already typed, trigger OCR matching
+    const cleanNum = aadhaarNumber.replace(/\s+/g, '');
+    if (cleanNum.length === 12) {
+      verifyAadhaarWithOcr(file, cleanNum);
+    }
   };
 
   const handlePanFileUpload = (file) => {
-    if (file.size > 5 * 1024 * 1024) {
-      setErrorMessage('PAN document exceeds 5MB size limit.');
+    if (file.size > 10 * 1024 * 1024) {
+      setErrorMessage('PAN document exceeds 10MB size limit.');
       return;
     }
     setPanFile(file);
@@ -106,27 +124,83 @@ export const Register = ({ onNavigateToLogin }) => {
     }
   };
 
+  // Run Real Aadhaar Document-to-Input Matching
+  const verifyAadhaarWithOcr = async (fileToScan, numberToMatch) => {
+    const targetFile = fileToScan || aadhaarFile;
+    const targetNumber = (numberToMatch || aadhaarNumber).replace(/\s+/g, '');
+
+    if (!targetFile) {
+      setErrorMessage('Please upload your Aadhaar card photo first.');
+      return;
+    }
+    if (targetNumber.length !== 12) {
+      setErrorMessage('Please enter a 12-digit Aadhaar number before verifying.');
+      return;
+    }
+
+    setIsScanningAadhaar(true);
+    setErrorMessage(null);
+    setAadhaarScanStepText('Scanning Aadhaar card...');
+
+    // Progress text simulation
+    setTimeout(() => setAadhaarScanStepText('Reading document details...'), 350);
+    setTimeout(() => setAadhaarScanStepText('Comparing Aadhaar number...'), 700);
+
+    try {
+      const formData = new FormData();
+      formData.append('aadhaarNumber', targetNumber);
+      formData.append('aadhaarDoc', targetFile);
+
+      const res = await api.verifyAadhaarOcr(formData);
+      const result = res.data;
+      setAadhaarOcrResult(result);
+
+      if (result.aadhaarNumberMatched) {
+        setAadhaarNumberMatched(true);
+        setSuccessMessage('✓ Aadhaar document verified! Number matches entered details.');
+      } else {
+        setAadhaarNumberMatched(false);
+        setErrorMessage(result.message || 'Aadhaar verification failed. Please check the uploaded photo.');
+      }
+    } catch (err) {
+      console.error('Aadhaar OCR verification error:', err);
+      setAadhaarNumberMatched(false);
+      setAadhaarOcrResult({
+        documentDetected: false,
+        ocrSuccess: false,
+        aadhaarNumberDetected: false,
+        aadhaarNumberMatched: false,
+        verificationStatus: 'OCR_FAILED',
+        message: err.response?.data?.message || 'Unable to read the Aadhaar card image. Please upload a clear photo.'
+      });
+      setErrorMessage(err.response?.data?.message || 'Unable to read the Aadhaar card image. Please upload a clear photo.');
+    } finally {
+      setIsScanningAadhaar(false);
+    }
+  };
+
   // ----------------------------------------------------------------
-  // STEP 1 -> STEP 2 (Proceed to OTP)
+  // STEP 1 -> STEP 2 (Dispatch OTP)
   // ----------------------------------------------------------------
   const handleProceedToOtp = async (e) => {
     e.preventDefault();
     setErrorMessage(null);
+    setSuccessMessage(null);
 
-    if (!fullName.trim() || fullName.trim().length < 3) {
-      setErrorMessage('Please enter your full name (at least 3 characters).');
+    if (fullName.trim().length < 3) {
+      setErrorMessage('Please enter your full legal name (at least 3 characters).');
       return;
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email.trim())) {
+    if (!emailRegex.test(email)) {
       setErrorMessage('Please enter a valid email address.');
       return;
     }
 
-    const phoneClean = phoneNumber.trim().replace(/\D/g, '');
-    if (!/^[6-9]\d{9}$/.test(phoneClean)) {
-      setErrorMessage('Please enter a valid 10-digit Indian phone number starting with 6, 7, 8, or 9.');
+    const cleanPhone = phoneNumber.replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      setErrorMessage('Please enter a valid 10-digit Indian mobile number.');
       return;
     }
 
@@ -136,17 +210,14 @@ export const Register = ({ onNavigateToLogin }) => {
     }
 
     if (password !== confirmPassword) {
-      setErrorMessage('Passwords do not match. Please recheck.');
+      setErrorMessage('Password and Confirm Password do not match.');
       return;
     }
 
+    await triggerSendOtp(cleanPhone, email.trim());
     setCurrentStep(2);
-    triggerSendOtp(phoneClean, email.trim());
   };
 
-  // ----------------------------------------------------------------
-  // STEP 2: Send OTP (Dispatches to Email and Phone)
-  // ----------------------------------------------------------------
   const triggerSendOtp = async (phoneToUse, emailToUse) => {
     const targetPhone = (phoneToUse || phoneNumber).trim().replace(/\D/g, '');
     const targetEmail = (emailToUse || email).trim();
@@ -249,32 +320,44 @@ export const Register = ({ onNavigateToLogin }) => {
     }
 
     if (!aadhaarFile) {
-      setErrorMessage('Please upload your Aadhaar document/photo.');
+      setErrorMessage('Please upload your Aadhaar document photo.');
       return;
     }
 
     if (!panFile) {
-      setErrorMessage('Please upload your PAN card document/photo.');
+      setErrorMessage('Please upload your PAN card document photo.');
       return;
     }
 
-    // Redirect all details to Step 4 for final review & DB save
+    if (!aadhaarNumberMatched) {
+      setErrorMessage('Aadhaar verification is required. Please click "Verify Aadhaar" to verify your document.');
+      return;
+    }
+
     setCurrentStep(4);
   };
 
   // ----------------------------------------------------------------
-  // STEP 4: SUBMIT ALL DETAILS & SAVE TO MYSQL DATABASE
+  // STEP 4: Submit Registration (Save in MySQL Database)
   // ----------------------------------------------------------------
-  const handleSaveToDatabase = async () => {
+  const handleFinalDatabaseSubmit = async () => {
+    if (!aadhaarNumberMatched) {
+      setErrorMessage('Cannot complete registration: Aadhaar number verification has not passed.');
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
 
     try {
+      const cleanPhone = phoneNumber.trim().replace(/\D/g, '');
       const cleanAadhaar = aadhaarNumber.replace(/\s+/g, '');
+
       const formData = new FormData();
       formData.append('fullName', fullName.trim());
-      formData.append('email', email.trim().toLowerCase());
-      formData.append('phoneNumber', phoneNumber.trim().replace(/\D/g, ''));
+      formData.append('email', email.trim());
+      formData.append('phoneNumber', cleanPhone);
       formData.append('password', password);
       formData.append('aadhaarNumber', cleanAadhaar);
       formData.append('aadhaarDoc', aadhaarFile);
@@ -283,18 +366,28 @@ export const Register = ({ onNavigateToLogin }) => {
       const res = await api.register(formData);
 
       if (res.data.success) {
+        if (res.data.token) {
+          localStorage.setItem('renthub_token', res.data.token);
+          localStorage.setItem('renthub_user', JSON.stringify(res.data.user));
+        }
+
         setRegisteredUserSummary(res.data.user);
         setIsRegistrationComplete(true);
-        
+        setCurrentStep(5);
+
         confetti({
-          particleCount: 140,
-          spread: 85,
+          particleCount: 150,
+          spread: 80,
           origin: { y: 0.6 },
           colors: ['#10b981', '#34d399', '#059669', '#3b82f6', '#f59e0b']
         });
       }
     } catch (err) {
-      setErrorMessage(err.response?.data?.message || 'Failed to save to database. Please check your details and try again.');
+      console.error('Registration failed:', err);
+      setErrorMessage(
+        err.response?.data?.message ||
+        'Registration failed. Please check your details and try again.'
+      );
     } finally {
       setIsLoading(false);
     }
@@ -302,52 +395,52 @@ export const Register = ({ onNavigateToLogin }) => {
 
   return (
     <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-2xl w-full">
-
-        {/* Stepper Progress Header */}
-        <div className="mb-8">
-          <div className="grid grid-cols-4 gap-2 text-center text-xs font-semibold select-none">
+      <div className="w-full max-w-xl space-y-6">
+        
+        {/* Stepper Progress Bar */}
+        <div className="glass-panel p-4 rounded-2xl border border-slate-800 shadow-lg">
+          <div className="grid grid-cols-4 text-center text-xs font-semibold">
             
             {/* Step 1 */}
-            <div className={`flex flex-col items-center gap-1.5 transition-colors ${currentStep >= 1 ? 'text-brand-400' : 'text-slate-500'}`}>
+            <div className={`flex flex-col items-center gap-1.5 transition-colors ${currentStep === 1 ? 'text-brand-400' : 'text-slate-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center border font-bold text-sm transition-all ${
                 currentStep > 1 
-                  ? 'bg-brand-500 text-white border-brand-500' 
+                  ? 'bg-emerald-500 text-white border-emerald-500' 
                   : currentStep === 1 
                   ? 'bg-brand-500/20 border-brand-400 text-brand-300 ring-2 ring-brand-500/30' 
                   : 'bg-slate-900 border-slate-700 text-slate-500'
               }`}>
                 {currentStep > 1 ? <Check className="w-4 h-4" /> : '1'}
               </div>
-              <span>1. Basic Info</span>
+              <span>1. Details</span>
             </div>
 
             {/* Step 2 */}
-            <div className={`flex flex-col items-center gap-1.5 transition-colors ${currentStep >= 2 ? 'text-brand-400' : 'text-slate-500'}`}>
+            <div className={`flex flex-col items-center gap-1.5 transition-colors ${currentStep === 2 ? 'text-brand-400' : 'text-slate-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center border font-bold text-sm transition-all ${
                 currentStep > 2 
-                  ? 'bg-brand-500 text-white border-brand-500' 
+                  ? 'bg-emerald-500 text-white border-emerald-500' 
                   : currentStep === 2 
                   ? 'bg-brand-500/20 border-brand-400 text-brand-300 ring-2 ring-brand-500/30' 
                   : 'bg-slate-900 border-slate-700 text-slate-500'
               }`}>
                 {currentStep > 2 ? <Check className="w-4 h-4" /> : '2'}
               </div>
-              <span>2. OTP Verify</span>
+              <span>2. OTP</span>
             </div>
 
             {/* Step 3 */}
-            <div className={`flex flex-col items-center gap-1.5 transition-colors ${currentStep >= 3 ? 'text-brand-400' : 'text-slate-500'}`}>
+            <div className={`flex flex-col items-center gap-1.5 transition-colors ${currentStep === 3 ? 'text-brand-400' : 'text-slate-400'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center border font-bold text-sm transition-all ${
                 currentStep > 3 
-                  ? 'bg-brand-500 text-white border-brand-500' 
+                  ? 'bg-emerald-500 text-white border-emerald-500' 
                   : currentStep === 3 
                   ? 'bg-brand-500/20 border-brand-400 text-brand-300 ring-2 ring-brand-500/30' 
                   : 'bg-slate-900 border-slate-700 text-slate-500'
               }`}>
                 {currentStep > 3 ? <Check className="w-4 h-4" /> : '3'}
               </div>
-              <span>3. KYC Docs</span>
+              <span>3. KYC &amp; OCR</span>
             </div>
 
             {/* Step 4 */}
@@ -448,8 +541,8 @@ export const Register = ({ onNavigateToLogin }) => {
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
                   Mobile Phone Number (India) <span className="text-brand-400">*</span>
                 </label>
-                <div className="relative flex items-center">
-                  <div className="absolute left-3.5 flex items-center gap-1 text-slate-400 text-sm font-medium border-r border-slate-700 pr-2">
+                <div className="relative">
+                  <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-slate-400 font-semibold text-sm">
                     <span>🇮🇳 +91</span>
                   </div>
                   <input
@@ -458,8 +551,8 @@ export const Register = ({ onNavigateToLogin }) => {
                     maxLength={10}
                     placeholder="9876543210"
                     value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, ''))}
-                    className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-24 pr-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400 transition-all"
+                    onChange={(e) => setPhoneNumber(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-24 pr-4 py-3 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400 transition-all"
                   />
                 </div>
               </div>
@@ -471,14 +564,14 @@ export const Register = ({ onNavigateToLogin }) => {
                     Password <span className="text-brand-400">*</span>
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                     <input
                       type={showPassword ? 'text' : 'password'}
                       required
                       placeholder="Min 8 characters"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400 transition-all"
+                      className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400 transition-all"
                     />
                     <button
                       type="button"
@@ -495,14 +588,14 @@ export const Register = ({ onNavigateToLogin }) => {
                     Confirm Password <span className="text-brand-400">*</span>
                   </label>
                   <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
                     <input
                       type={showConfirmPassword ? 'text' : 'password'}
                       required
-                      placeholder="Re-enter password"
+                      placeholder="Repeat password"
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400 transition-all"
+                      className="w-full bg-slate-900/90 border border-slate-700/80 rounded-xl pl-11 pr-10 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-brand-400 focus:ring-1 focus:ring-brand-400 transition-all"
                     />
                     <button
                       type="button"
@@ -515,27 +608,35 @@ export const Register = ({ onNavigateToLogin }) => {
                 </div>
               </div>
 
-              {/* Next Button */}
+              {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full mt-4 flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 text-white font-semibold py-3.5 px-4 rounded-xl shadow-glow hover:shadow-glow-lg transition-all"
+                disabled={isSendingOtp}
+                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-xl shadow-glow hover:shadow-glow-lg transition-all text-sm tracking-wide mt-2"
               >
-                <span>Proceed to OTP Verification</span>
-                <ArrowRight className="w-4 h-4" />
+                {isSendingOtp ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Dispatching OTP...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>Next: Send OTP to Phone &amp; Email</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </button>
 
-              <div className="text-center pt-2">
-                <p className="text-xs text-slate-400">
-                  Already registered?{' '}
-                  <button
-                    type="button"
-                    onClick={onNavigateToLogin}
-                    className="text-brand-400 hover:text-brand-300 font-semibold underline underline-offset-4"
-                  >
-                    Log In
-                  </button>
-                </p>
-              </div>
+              <p className="text-center text-xs text-slate-400 pt-2">
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={onNavigateToLogin}
+                  className="text-brand-400 hover:text-brand-300 font-semibold underline underline-offset-4"
+                >
+                  Log in
+                </button>
+              </p>
             </form>
           )}
 
@@ -546,48 +647,21 @@ export const Register = ({ onNavigateToLogin }) => {
             <div className="space-y-6 animate-fade-in">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 text-xs font-semibold mb-2">
-                  <Mail className="w-3.5 h-3.5" />
-                  <span>Email &amp; Phone OTP Verification</span>
+                  <KeyRound className="w-3.5 h-3.5" />
+                  <span>Step 2 of 4</span>
                 </div>
-                <h2 className="text-2xl font-bold text-white tracking-tight">Enter Verification Code</h2>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Enter 6-Digit OTP Code</h2>
                 <p className="text-sm text-slate-400 mt-1">
-                  We sent a 6-digit OTP to <strong className="text-brand-300">{email}</strong> and <strong className="text-slate-200">+91 {phoneNumber}</strong>.
+                  We sent a 6-digit verification code to <span className="text-brand-300 font-mono">+91 {phoneNumber}</span> and <span className="text-brand-300">{email}</span>.
                 </p>
               </div>
 
-              {/* Simulated OTP / Real Delivery Popover */}
-              {simulatedSmsOtp && (
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-brand-500/40 shadow-glow flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-brand-500/20 text-brand-400 flex items-center justify-center flex-shrink-0">
-                      <KeyRound className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-medium text-slate-400">📩 Real-time OTP Dispatched</p>
-                      <p className="text-sm text-white font-mono">
-                        Verification Code: <span className="text-brand-400 font-bold text-base tracking-wider">{simulatedSmsOtp}</span>
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const digits = simulatedSmsOtp.split('');
-                      setOtpDigits(digits);
-                    }}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-brand-600/30 hover:bg-brand-600/50 text-brand-300 border border-brand-500/30 font-medium transition-colors"
-                  >
-                    Auto-Fill Code
-                  </button>
-                </div>
-              )}
-
-              {/* 6-Digit OTP Boxes */}
+              {/* 6 Digit Inputs */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3 text-center">
-                  Enter 6-Digit OTP Code
+                  Enter 6-Digit Verification Code
                 </label>
-                <div className="flex justify-center items-center gap-2 sm:gap-3" onPaste={handleOtpPaste}>
+                <div className="flex justify-center gap-2 sm:gap-3" onPaste={handleOtpPaste}>
                   {otpDigits.map((digit, idx) => (
                     <input
                       key={idx}
@@ -658,7 +732,7 @@ export const Register = ({ onNavigateToLogin }) => {
           )}
 
           {/* ========================================================= */}
-          {/* STEP 3: IDENTITY VERIFICATION (KYC) */}
+          {/* STEP 3: IDENTITY VERIFICATION (KYC & OCR MATCHING) */}
           {/* ========================================================= */}
           {currentStep === 3 && (
             <form onSubmit={handleProceedToStep4} className="space-y-5 animate-fade-in">
@@ -669,7 +743,7 @@ export const Register = ({ onNavigateToLogin }) => {
                 </div>
                 <h2 className="text-2xl font-bold text-white tracking-tight">Identity Verification (KYC)</h2>
                 <p className="text-sm text-slate-400 mt-1">
-                  Upload your Aadhaar &amp; PAN card documents. You will review everything in Step 4 before saving.
+                  Enter your Aadhaar number and upload your card photo. The system will perform OCR document-to-input matching.
                 </p>
               </div>
 
@@ -723,7 +797,7 @@ export const Register = ({ onNavigateToLogin }) => {
                       <div className="flex flex-col items-center py-2">
                         <Upload className="w-7 h-7 text-slate-400 mb-1.5" />
                         <span className="text-xs font-semibold text-slate-200">Upload Aadhaar</span>
-                        <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG, PDF (Max 5MB)</span>
+                        <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG (Max 10MB)</span>
                       </div>
                     )}
                   </label>
@@ -757,15 +831,84 @@ export const Register = ({ onNavigateToLogin }) => {
                     ) : (
                       <div className="flex flex-col items-center py-2">
                         <Upload className="w-7 h-7 text-slate-400 mb-1.5" />
-                        <span className="text-xs font-semibold text-slate-200">Upload PAN Card</span>
-                        <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG, PDF (Max 5MB)</span>
+                        <span className="text-xs font-semibold text-slate-200">Upload PAN</span>
+                        <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG (Max 10MB)</span>
                       </div>
                     )}
                   </label>
                 </div>
               </div>
 
-              {/* Buttons */}
+              {/* Real-Time Aadhaar OCR Verification Box */}
+              {isScanningAadhaar && (
+                <div className="p-4 rounded-2xl bg-brand-500/10 border border-brand-500/30 flex items-center gap-3 text-xs text-brand-300 animate-fade-in">
+                  <RefreshCw className="w-5 h-5 text-brand-400 animate-spin flex-shrink-0" />
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-white">{aadhaarScanStepText}</p>
+                    <p className="text-slate-400">Verifying document clarity, UIDAI structure, and 12-digit number</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Aadhaar Verification Result Card */}
+              {aadhaarOcrResult && !isScanningAadhaar && (
+                <div className={`p-4 rounded-2xl border transition-all animate-fade-in ${
+                  aadhaarNumberMatched
+                    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200'
+                    : 'bg-red-500/10 border-red-500/40 text-red-200'
+                }`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      {aadhaarNumberMatched ? (
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+                      )}
+                      <div>
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                          {aadhaarNumberMatched ? '✓ Aadhaar Document Verified' : '✗ Aadhaar Number Mismatch'}
+                        </h4>
+                        <p className="text-[11px] mt-0.5 opacity-90">{aadhaarOcrResult.message}</p>
+                      </div>
+                    </div>
+
+                    {!aadhaarNumberMatched && (
+                      <button
+                        type="button"
+                        onClick={() => verifyAadhaarWithOcr(aadhaarFile, aadhaarNumber)}
+                        className="px-3 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 text-xs font-semibold flex items-center gap-1"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Retry</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {aadhaarOcrResult.passedChecks && aadhaarOcrResult.passedChecks.length > 0 && (
+                    <div className="mt-2.5 pt-2 border-t border-emerald-500/20 space-y-1 text-[11px]">
+                      {aadhaarOcrResult.passedChecks.map((chk, idx) => (
+                        <div key={idx} className="flex items-center gap-1.5 text-emerald-300 font-medium">
+                          <span>{chk}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Verify Aadhaar Button if not yet scanned */}
+              {!aadhaarOcrResult && aadhaarFile && aadhaarNumber.replace(/\s+/g, '').length === 12 && !isScanningAadhaar && (
+                <button
+                  type="button"
+                  onClick={() => verifyAadhaarWithOcr(aadhaarFile, aadhaarNumber)}
+                  className="w-full flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 border border-brand-500/40 text-brand-300 font-semibold py-2.5 px-4 rounded-xl transition-all text-xs"
+                >
+                  <Scan className="w-4 h-4 text-brand-400" />
+                  <span>[ 🔍 VERIFY AADHAAR CARD OCR ]</span>
+                </button>
+              )}
+
+              {/* Action Buttons */}
               <div className="flex items-center gap-3 pt-2">
                 <button
                   type="button"
@@ -775,12 +918,13 @@ export const Register = ({ onNavigateToLogin }) => {
                   <ArrowLeft className="w-4 h-4" />
                   <span>Back</span>
                 </button>
-                
+
                 <button
                   type="submit"
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-semibold py-3.5 px-4 rounded-xl shadow-glow hover:shadow-glow-lg transition-all text-sm"
+                  disabled={!aadhaarNumberMatched || !panFile}
+                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl shadow-glow hover:shadow-glow-lg transition-all text-sm tracking-wide"
                 >
-                  <span>Proceed to Step 4 (Review &amp; Save)</span>
+                  <span>Next: Review &amp; Database Save</span>
                   <ArrowRight className="w-4 h-4" />
                 </button>
               </div>
@@ -788,128 +932,78 @@ export const Register = ({ onNavigateToLogin }) => {
           )}
 
           {/* ========================================================= */}
-          {/* STEP 4: REVIEW DETAILS & SAVE TO MYSQL DATABASE */}
+          {/* STEP 4: REVIEW & SAVE IN MYSQL */}
           {/* ========================================================= */}
-          {currentStep === 4 && !isRegistrationComplete && (
+          {currentStep === 4 && (
             <div className="space-y-6 animate-fade-in">
               <div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 text-xs font-semibold mb-2">
                   <Database className="w-3.5 h-3.5" />
-                  <span>STEP 4: Review &amp; Save to MySQL Database</span>
+                  <span>Step 4: Final Confirmation</span>
                 </div>
-                <h2 className="text-2xl font-bold text-white tracking-tight">Review All Information</h2>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Review &amp; Complete Registration</h2>
                 <p className="text-sm text-slate-400 mt-1">
-                  Please review all details collected from Steps 1, 2, and 3 before saving to the database.
+                  Please review your details. Clicking complete will persist your profile into the MySQL database.
                 </p>
               </div>
 
               {/* Summary Cards */}
-              <div className="space-y-4">
+              <div className="space-y-3 bg-slate-900/80 border border-slate-800 rounded-2xl p-4 sm:p-5 text-sm">
                 
-                {/* 1. Basic Details Summary */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <User className="w-3.5 h-3.5 text-brand-400" /> Step 1: Personal Account Info
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentStep(1)}
-                      className="text-xs text-brand-400 hover:underline"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-slate-500 block">Full Name:</span>
-                      <span className="text-white font-medium">{fullName}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block">Email Address:</span>
-                      <span className="text-white font-medium">{email}</span>
-                    </div>
-                  </div>
+                <div className="flex justify-between py-2 border-b border-slate-800/80">
+                  <span className="text-slate-400">Full Name</span>
+                  <span className="font-bold text-white">{fullName}</span>
                 </div>
 
-                {/* 2. OTP Verification Status */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <Smartphone className="w-3.5 h-3.5 text-blue-400" /> Step 2: Verification Status
-                    </span>
-                    <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" /> Verified
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-slate-500 block">Mobile Phone:</span>
-                      <span className="text-emerald-400 font-mono font-medium">+91 {phoneNumber} (OTP Verified ✓)</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block">Email OTP:</span>
-                      <span className="text-emerald-400 font-medium">Verified ✓</span>
-                    </div>
-                  </div>
+                <div className="flex justify-between py-2 border-b border-slate-800/80">
+                  <span className="text-slate-400">Email</span>
+                  <span className="font-medium text-white">{email}</span>
                 </div>
 
-                {/* 3. KYC Documents Summary */}
-                <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 space-y-2.5">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                    <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                      <FileCheck className="w-3.5 h-3.5 text-amber-400" /> Step 3: KYC Identity Documents
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setCurrentStep(3)}
-                      className="text-xs text-brand-400 hover:underline"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-slate-500 block">Aadhaar Number:</span>
-                      <span className="text-brand-300 font-mono font-medium">{aadhaarNumber}</span>
-                      <span className="text-[11px] text-slate-400 block mt-1">📄 {aadhaarFile?.name}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-500 block">PAN Card:</span>
-                      <span className="text-slate-200 font-medium">Uploaded</span>
-                      <span className="text-[11px] text-slate-400 block mt-1">📄 {panFile?.name}</span>
-                    </div>
-                  </div>
+                <div className="flex justify-between py-2 border-b border-slate-800/80">
+                  <span className="text-slate-400">Phone Number</span>
+                  <span className="font-mono text-emerald-400">✓ +91 {phoneNumber} (OTP Verified)</span>
+                </div>
+
+                <div className="flex justify-between py-2 border-b border-slate-800/80">
+                  <span className="text-slate-400">Aadhaar Verification</span>
+                  <span className="font-mono text-emerald-400">✓ {aadhaarNumber} (OCR Matched)</span>
+                </div>
+
+                <div className="flex justify-between py-2">
+                  <span className="text-slate-400">KYC Documents</span>
+                  <span className="text-slate-300 font-medium">{aadhaarFile?.name} &bull; {panFile?.name}</span>
                 </div>
 
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-3 pt-3">
+              {/* Final Action Buttons */}
+              <div className="flex items-center gap-3 pt-2">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(3)}
+                  disabled={isLoading}
                   className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-300 hover:text-white hover:bg-slate-800 text-sm font-medium transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  <span>Back to KYC</span>
+                  <span>Back</span>
                 </button>
-                
+
                 <button
                   type="button"
-                  disabled={isLoading}
-                  onClick={handleSaveToDatabase}
-                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 via-emerald-500 to-teal-500 hover:from-brand-500 hover:to-teal-400 text-white font-bold py-4 px-6 rounded-xl shadow-glow hover:shadow-glow-lg transition-all text-sm"
+                  disabled={isLoading || !aadhaarNumberMatched}
+                  onClick={handleFinalDatabaseSubmit}
+                  className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 disabled:opacity-50 text-white font-bold py-3.5 px-4 rounded-xl shadow-glow hover:shadow-glow-lg transition-all text-sm tracking-wide"
                 >
                   {isLoading ? (
                     <>
                       <RefreshCw className="w-4 h-4 animate-spin" />
-                      <span>Saving All Data to MySQL...</span>
+                      <span>Saving Profile to MySQL Database...</span>
                     </>
                   ) : (
                     <>
-                      <Database className="w-4 h-4" />
-                      <span>Confirm &amp; Save in Database</span>
+                      <Check className="w-4 h-4" />
+                      <span>COMPLETE REGISTRATION</span>
                     </>
                   )}
                 </button>
@@ -918,63 +1012,32 @@ export const Register = ({ onNavigateToLogin }) => {
           )}
 
           {/* ========================================================= */}
-          {/* REGISTRATION COMPLETE & REDIRECT TO LOGIN */}
+          {/* STEP 5: SUCCESS */}
           {/* ========================================================= */}
-          {isRegistrationComplete && (
-            <div className="py-8 px-4 text-center space-y-6 animate-slide-up">
-              
-              <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-brand-500 to-emerald-400 text-white flex items-center justify-center mx-auto shadow-glow-lg animate-bounce">
-                <CheckCircle2 className="w-10 h-10" />
+          {currentStep === 5 && (
+            <div className="text-center py-6 space-y-5 animate-fade-in">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto shadow-glow">
+                <Sparkles className="w-8 h-8" />
               </div>
 
-              <div>
-                <h2 className="text-3xl font-extrabold text-white tracking-tight">Registration Complete!</h2>
-                <p className="text-sm text-slate-300 mt-2 max-w-md mx-auto">
-                  All details from Steps 1, 2, and 3 have been successfully saved to the MySQL database.
+              <div className="space-y-2">
+                <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Registration Successful!</h2>
+                <p className="text-sm text-slate-300">
+                  Welcome to RentHub, <strong className="text-brand-400">{fullName}</strong>! Your account and KYC documents have been saved in the MySQL database.
                 </p>
               </div>
 
-              {registeredUserSummary && (
-                <div className="max-w-md mx-auto text-left p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-2 text-xs">
-                  <div className="flex justify-between border-b border-slate-800/80 pb-1.5">
-                    <span className="text-slate-400">Full Name:</span>
-                    <span className="text-white font-semibold">{registeredUserSummary.fullName}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-800/80 pb-1.5">
-                    <span className="text-slate-400">Email:</span>
-                    <span className="text-slate-200">{registeredUserSummary.email}</span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-800/80 pb-1.5">
-                    <span className="text-slate-400">Phone Status:</span>
-                    <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                      <Check className="w-3.5 h-3.5" /> +91 {registeredUserSummary.phoneNumber} (Verified)
-                    </span>
-                  </div>
-                  <div className="flex justify-between border-b border-slate-800/80 pb-1.5">
-                    <span className="text-slate-400">Aadhaar Record:</span>
-                    <span className="text-brand-300 font-mono">{registeredUserSummary.aadhaarMasked}</span>
-                  </div>
-                  <div className="flex justify-between pt-1">
-                    <span className="text-slate-400">Database Engine:</span>
-                    <span className="text-blue-400 font-mono">MySQL 8.0 &amp; Spring Boot</span>
-                  </div>
-                </div>
-              )}
-
-              <div className="space-y-3 pt-2">
-                <p className="text-xs text-slate-400">
-                  Redirecting to Login Page in <strong className="text-brand-400 text-sm font-mono">{redirectCountdown}</strong> seconds...
-                </p>
-                <button
-                  type="button"
-                  onClick={onNavigateToLogin}
-                  className="w-full max-w-md mx-auto flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-semibold py-3 px-4 rounded-xl shadow-glow transition-all text-sm"
-                >
-                  <span>Go to Login Page Now</span>
-                  <ArrowRight className="w-4 h-4" />
-                </button>
+              <div className="p-4 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-400 font-mono">
+                Redirecting to Login in <span className="text-brand-400 font-bold">{redirectCountdown}</span> seconds...
               </div>
 
+              <button
+                type="button"
+                onClick={onNavigateToLogin}
+                className="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-semibold text-sm transition-all"
+              >
+                Go to Login Now
+              </button>
             </div>
           )}
 

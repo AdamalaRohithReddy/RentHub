@@ -1,0 +1,14 @@
+package com.rental.entity.enums;
+
+public enum VerificationStatus {
+    DOCUMENT_UPLOADED,
+    IMAGE_QUALITY_CHECKED,
+    OCR_PROCESSED,
+    DOCUMENT_APPEARS_VALID,
+    FORMAT_VALID,
+    DETAILS_MATCHED,
+    POSSIBLE_MISMATCH,
+    PENDING_MANUAL_REVIEW,
+    VERIFIED,
+    REJECTED
+}
