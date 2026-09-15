@@ -12,7 +12,7 @@ export const Register = ({ onNavigateToLogin }) => {
   // Stepper State: 1 = Basic Details, 2 = Phone/Email OTP, 3 = Identity KYC, 4 = Review & Save to Database, 5 = Success
   const [currentStep, setCurrentStep] = useState(1);
 
-  // Step 1: Basic Details
+  // Step 1: Basic Details (Kept in memory across step changes)
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -21,7 +21,7 @@ export const Register = ({ onNavigateToLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Step 2: Phone & Email OTP
+  // Step 2: Phone & Email OTP (Kept in memory across step changes)
   const [otpDigits, setOtpDigits] = useState(['', '', '', '', '', '']);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -30,10 +30,10 @@ export const Register = ({ onNavigateToLogin }) => {
   const [isOtpVerified, setIsOtpVerified] = useState(false);
   const otpInputRefs = useRef([]);
 
-  // Step 3: Identity Verification (KYC) & Aadhaar OCR
+  // Step 3: Identity Verification (KYC) & Aadhaar OCR (Kept in memory across step changes)
   const [aadhaarNumber, setAadhaarNumber] = useState('');
   const [aadhaarFile, setAadhaarFile] = useState(null);
-  const [panFile, setPanFile] = useState(null);
+  const [panFile, setPanFile] = useState(null); // Optional PAN
   const [aadhaarPreview, setAadhaarPreview] = useState(null);
   const [panPreview, setPanPreview] = useState(null);
 
@@ -62,7 +62,7 @@ export const Register = ({ onNavigateToLogin }) => {
     return () => clearInterval(timer);
   }, [resendTimer]);
 
-  // Post-Registration Redirect Countdown
+  // Post-Registration Redirect Countdown to Login
   useEffect(() => {
     let timer;
     if (isRegistrationComplete && redirectCountdown > 0) {
@@ -206,7 +206,7 @@ export const Register = ({ onNavigateToLogin }) => {
   };
 
   // ----------------------------------------------------------------
-  // STEP 1 -> STEP 2 (Dispatch OTP)
+  // STEP 1 -> STEP 2 (Dispatch OTP) - In-Memory only, no user record in DB
   // ----------------------------------------------------------------
   const handleProceedToOtp = async (e) => {
     e.preventDefault();
@@ -302,7 +302,7 @@ export const Register = ({ onNavigateToLogin }) => {
   };
 
   // ----------------------------------------------------------------
-  // STEP 2: Verify OTP -> STEP 3
+  // STEP 2: Verify OTP -> STEP 3 - In-Memory only, no user record in DB
   // ----------------------------------------------------------------
   const handleVerifyOtp = async () => {
     const fullOtp = otpDigits.join('');
@@ -334,6 +334,8 @@ export const Register = ({ onNavigateToLogin }) => {
 
   // ----------------------------------------------------------------
   // STEP 3 -> STEP 4 (Proceed to Review & Database Save)
+  // Mandatory: Aadhaar Number + Aadhaar Doc + Aadhaar OCR Matched
+  // Optional: PAN Card (does not block registration)
   // ----------------------------------------------------------------
   const handleProceedToStep4 = (e) => {
     e.preventDefault();
@@ -350,21 +352,17 @@ export const Register = ({ onNavigateToLogin }) => {
       return;
     }
 
-    if (!panFile) {
-      setErrorMessage('Please upload your PAN card document photo.');
-      return;
-    }
-
     if (!aadhaarNumberMatched) {
       setErrorMessage('Aadhaar verification is required. The uploaded photo must match your entered 12-digit Aadhaar number.');
       return;
     }
 
+    // PAN card is optional - does not block moving to step 4
     setCurrentStep(4);
   };
 
   // ----------------------------------------------------------------
-  // STEP 4: Submit Registration (Save in MySQL Database)
+  // STEP 4: Submit Registration (Save all details to MySQL ONLY NOW)
   // ----------------------------------------------------------------
   const handleFinalDatabaseSubmit = async () => {
     if (!aadhaarNumberMatched) {
@@ -387,7 +385,12 @@ export const Register = ({ onNavigateToLogin }) => {
       formData.append('password', password);
       formData.append('aadhaarNumber', cleanAadhaar);
       formData.append('aadhaarDoc', aadhaarFile);
-      formData.append('panDoc', panFile);
+      
+      // Append PAN card ONLY if uploaded
+      if (panFile) {
+        formData.append('panDoc', panFile);
+      }
+      
       if (aadhaarOcrResult?.rawOcrText) {
         formData.append('ocrExtractedText', aadhaarOcrResult.rawOcrText);
       }
@@ -525,7 +528,7 @@ export const Register = ({ onNavigateToLogin }) => {
               <div>
                 <h2 className="text-2xl font-bold text-white tracking-tight">Create your RentHub Account</h2>
                 <p className="text-sm text-slate-400 mt-1">
-                  Step 1: Enter your details. All information will be verified and saved in Step 4.
+                  Step 1: Enter your details. Information is retained in memory and saved to MySQL only on final submit.
                 </p>
               </div>
 
@@ -761,7 +764,7 @@ export const Register = ({ onNavigateToLogin }) => {
           )}
 
           {/* ========================================================= */}
-          {/* STEP 3: IDENTITY VERIFICATION (KYC & STRICT OCR MATCHING) */}
+          {/* STEP 3: IDENTITY VERIFICATION (MANDATORY AADHAAR + OPTIONAL PAN) */}
           {/* ========================================================= */}
           {currentStep === 3 && (
             <form onSubmit={handleProceedToStep4} className="space-y-5 animate-fade-in">
@@ -772,14 +775,14 @@ export const Register = ({ onNavigateToLogin }) => {
                 </div>
                 <h2 className="text-2xl font-bold text-white tracking-tight">Identity Verification (KYC)</h2>
                 <p className="text-sm text-slate-400 mt-1">
-                  Enter your Aadhaar number and upload your card photo. The system will perform OCR document-to-input matching.
+                  Aadhaar verification is <strong className="text-white">mandatory</strong>. PAN card is <strong className="text-slate-300">optional</strong>.
                 </p>
               </div>
 
-              {/* Aadhaar Number */}
+              {/* Aadhaar Number (Mandatory) */}
               <div>
                 <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                  12-Digit Aadhaar Number <span className="text-brand-400">*</span>
+                  12-Digit Aadhaar Number <span className="text-brand-400">* (Mandatory)</span>
                 </label>
                 <div className="relative">
                   <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
@@ -797,10 +800,10 @@ export const Register = ({ onNavigateToLogin }) => {
 
               {/* Uploads Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                {/* Aadhaar Upload */}
+                {/* Aadhaar Upload (Mandatory) */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    Aadhaar Document / Photo <span className="text-brand-400">*</span>
+                    Aadhaar Photo <span className="text-brand-400">* (Mandatory)</span>
                   </label>
                   <label className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
                     aadhaarFile ? 'border-brand-500/50 bg-brand-500/5' : 'border-slate-700 hover:border-slate-500 bg-slate-900/60'
@@ -825,24 +828,23 @@ export const Register = ({ onNavigateToLogin }) => {
                     ) : (
                       <div className="flex flex-col items-center py-2">
                         <Upload className="w-7 h-7 text-slate-400 mb-1.5" />
-                        <span className="text-xs font-semibold text-slate-200">Upload Aadhaar</span>
+                        <span className="text-xs font-semibold text-slate-200">Upload Aadhaar *</span>
                         <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG (Max 10MB)</span>
                       </div>
                     )}
                   </label>
                 </div>
 
-                {/* PAN Upload */}
+                {/* PAN Upload (Optional) */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
-                    PAN Document / Photo <span className="text-brand-400">*</span>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    PAN Card Photo <span className="text-slate-500 normal-case font-normal">(Optional)</span>
                   </label>
                   <label className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
-                    panFile ? 'border-brand-500/50 bg-brand-500/5' : 'border-slate-700 hover:border-slate-500 bg-slate-900/60'
+                    panFile ? 'border-brand-500/50 bg-brand-500/5' : 'border-slate-800 hover:border-slate-700 bg-slate-900/40'
                   }`}>
                     <input
                       type="file"
-                      required
                       accept="image/*,.pdf"
                       onChange={(e) => e.target.files?.[0] && handlePanFileUpload(e.target.files[0])}
                       className="hidden"
@@ -859,9 +861,9 @@ export const Register = ({ onNavigateToLogin }) => {
                       </div>
                     ) : (
                       <div className="flex flex-col items-center py-2">
-                        <Upload className="w-7 h-7 text-slate-400 mb-1.5" />
-                        <span className="text-xs font-semibold text-slate-200">Upload PAN</span>
-                        <span className="text-[10px] text-slate-500 mt-0.5">JPG, PNG (Max 10MB)</span>
+                        <Upload className="w-7 h-7 text-slate-500 mb-1.5" />
+                        <span className="text-xs font-semibold text-slate-400">Upload PAN (Optional)</span>
+                        <span className="text-[10px] text-slate-600 mt-0.5">Optional KYC Step</span>
                       </div>
                     )}
                   </label>
@@ -950,7 +952,7 @@ export const Register = ({ onNavigateToLogin }) => {
 
                 <button
                   type="submit"
-                  disabled={!aadhaarNumberMatched || !panFile || isScanningAadhaar}
+                  disabled={!aadhaarNumberMatched || isScanningAadhaar}
                   className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-500 hover:to-brand-400 disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold py-3 px-4 rounded-xl shadow-glow hover:shadow-glow-lg transition-all text-sm tracking-wide"
                 >
                   <span>Next: Review &amp; Database Save</span>
@@ -961,7 +963,7 @@ export const Register = ({ onNavigateToLogin }) => {
           )}
 
           {/* ========================================================= */}
-          {/* STEP 4: REVIEW & SAVE IN MYSQL */}
+          {/* STEP 4: REVIEW & SAVE IN MYSQL ONLY AFTER FULL COMPLETION */}
           {/* ========================================================= */}
           {currentStep === 4 && (
             <div className="space-y-6 animate-fade-in">
@@ -1001,7 +1003,9 @@ export const Register = ({ onNavigateToLogin }) => {
 
                 <div className="flex justify-between py-2">
                   <span className="text-slate-400">KYC Documents</span>
-                  <span className="text-slate-300 font-medium">{aadhaarFile?.name} &bull; {panFile?.name}</span>
+                  <span className="text-slate-300 font-medium">
+                    {aadhaarFile?.name} (Aadhaar) &bull; {panFile ? `${panFile.name} (PAN)` : 'PAN Not Provided (Optional)'}
+                  </span>
                 </div>
 
               </div>
@@ -1041,7 +1045,7 @@ export const Register = ({ onNavigateToLogin }) => {
           )}
 
           {/* ========================================================= */}
-          {/* STEP 5: SUCCESS */}
+          {/* STEP 5: SUCCESS & AUTO-REDIRECT TO LOGIN */}
           {/* ========================================================= */}
           {currentStep === 5 && (
             <div className="text-center py-6 space-y-5 animate-fade-in">
@@ -1052,7 +1056,7 @@ export const Register = ({ onNavigateToLogin }) => {
               <div className="space-y-2">
                 <h2 className="text-2xl sm:text-3xl font-extrabold text-white">Registration Successful!</h2>
                 <p className="text-sm text-slate-300">
-                  Welcome to RentHub, <strong className="text-brand-400">{fullName}</strong>! Your account and KYC documents have been saved in the MySQL database.
+                  Welcome to RentHub, <strong className="text-brand-400">{fullName}</strong>! Your account and KYC details have been saved in the MySQL database.
                 </p>
               </div>
 

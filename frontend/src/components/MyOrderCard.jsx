@@ -1,10 +1,10 @@
 import React from 'react';
 import { 
   Tag, Calendar, User, Clock, CheckCircle2, XCircle, 
-  AlertCircle, Image as ImageIcon, RotateCcw, AlertTriangle, ShieldCheck 
+  AlertCircle, Image as ImageIcon, RotateCcw, AlertTriangle, ShieldCheck, X 
 } from 'lucide-react';
 
-export const MyOrderCard = ({ order, onRequestReturn }) => {
+export const MyOrderCard = ({ order, onRequestReturn, onCancelOrder }) => {
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
@@ -46,10 +46,25 @@ export const MyOrderCard = ({ order, onRequestReturn }) => {
           </span>
         );
       case 'RETURN_CONFIRMED':
+      case 'RETURNED':
         return (
           <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3 text-teal-400" />
-            <span>RETURN CONFIRMED</span>
+            <span>RETURNED</span>
+          </span>
+        );
+      case 'CANCELLED_BY_CUSTOMER':
+        return (
+          <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
+            <XCircle className="w-3 h-3 text-slate-400" />
+            <span>CANCELLED BY YOU</span>
+          </span>
+        );
+      case 'CANCELLED_BY_VENDOR':
+        return (
+          <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
+            <XCircle className="w-3 h-3 text-rose-400" />
+            <span>CANCELLED BY VENDOR</span>
           </span>
         );
       case 'DAMAGE_REPORTED':
@@ -129,7 +144,26 @@ export const MyOrderCard = ({ order, onRequestReturn }) => {
         </div>
       </div>
 
-      {/* Action Notices & Return Button */}
+      {/* PENDING: Allow Customer to Cancel */}
+      {order.status === 'PENDING' && onCancelOrder && (
+        <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-amber-300">
+            <Clock className="w-4 h-4 text-amber-400 flex-shrink-0" />
+            <span>Waiting for owner approval. Available quantity is not reduced until accepted.</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onCancelOrder(order.id)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-red-500/20 border border-slate-700 hover:border-red-500/40 text-slate-300 hover:text-red-300 text-xs font-semibold transition-all self-stretch sm:self-auto justify-center"
+          >
+            <X className="w-3.5 h-3.5" />
+            <span>Cancel Request</span>
+          </button>
+        </div>
+      )}
+
+      {/* ACTIVE / RENTED: Return Product or Cancel */}
       {isRentedActive && (
         <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-emerald-300">
@@ -137,16 +171,30 @@ export const MyOrderCard = ({ order, onRequestReturn }) => {
             <span>Currently rented. Owner Contact: <strong>+91 {order.ownerPhone}</strong></span>
           </div>
 
-          {onRequestReturn && (
-            <button
-              type="button"
-              onClick={() => onRequestReturn(order)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition-all self-stretch sm:self-auto justify-center"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>RETURN PRODUCT</span>
-            </button>
-          )}
+          <div className="flex items-center gap-2 self-stretch sm:self-auto">
+            {onCancelOrder && (
+              <button
+                type="button"
+                onClick={() => onCancelOrder(order.id)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-900 hover:bg-red-500/20 border border-slate-700 hover:border-red-500/40 text-slate-300 hover:text-red-300 text-xs font-semibold transition-all justify-center"
+                title="Cancel active rental and restore product quantity"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Cancel Order</span>
+              </button>
+            )}
+
+            {onRequestReturn && (
+              <button
+                type="button"
+                onClick={() => onRequestReturn(order)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition-all justify-center"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>RETURN PRODUCT</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -157,10 +205,24 @@ export const MyOrderCard = ({ order, onRequestReturn }) => {
         </div>
       )}
 
-      {order.status === 'RETURN_CONFIRMED' && (
+      {(order.status === 'RETURN_CONFIRMED' || order.status === 'RETURNED') && (
         <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/20 text-teal-300 text-xs flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-teal-400 flex-shrink-0" />
-          <span>Return verified and confirmed by owner. Thank you for sharing in our community!</span>
+          <span>Return verified and confirmed by owner. Available quantity has been restored to the listing!</span>
+        </div>
+      )}
+
+      {order.status === 'CANCELLED_BY_CUSTOMER' && (
+        <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs flex items-center gap-2">
+          <XCircle className="w-4 h-4 text-slate-500 flex-shrink-0" />
+          <span>You cancelled this order. Any deducted quantity was restored to the product inventory.</span>
+        </div>
+      )}
+
+      {order.status === 'CANCELLED_BY_VENDOR' && (
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+          <XCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          <span>The vendor cancelled this order. Product quantity was restored.</span>
         </div>
       )}
 

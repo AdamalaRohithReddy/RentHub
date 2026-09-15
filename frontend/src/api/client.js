@@ -102,12 +102,14 @@ export const api = {
   deleteProductImage: (id, imageId) => client.delete(`/resources/${id}/images/${imageId}`),
   getConditionHistory: (id) => client.get(`/resources/${id}/condition-history`),
 
-  // Orders / Rental Requests / Returns
+  // Orders / Rental Requests / Returns / Cancellations
   createOrder: (orderData) => client.post('/orders', orderData),
   getMyOrders: () => client.get('/orders/my-orders'),
   getReceivedOrders: () => client.get('/orders/received'),
   acceptOrder: (orderId) => client.put(`/orders/${orderId}/accept`),
   rejectOrder: (orderId) => client.put(`/orders/${orderId}/reject`),
+  cancelOrderByCustomer: (orderId) => client.put(`/orders/${orderId}/cancel-customer`),
+  cancelOrderByVendor: (orderId) => client.put(`/orders/${orderId}/cancel-vendor`),
   requestReturn: (orderId, data) => client.post(`/orders/${orderId}/request-return`, data),
 
   // Return Inspection & Management

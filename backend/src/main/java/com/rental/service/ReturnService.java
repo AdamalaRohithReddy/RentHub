@@ -128,6 +128,12 @@ public class ReturnService {
 
     /**
      * Owner confirms return and restores product quantity safely in @Transactional block.
+     * Flow:
+     * - Order status updated to RETURNED
+     * - Add order quantity back to product's available quantity
+     * - Save updated product in database
+     * - Save updated order in database
+     * - Prevent duplicate quantity restoration
      */
     @Transactional
     public OrderResponse confirmReturn(Long orderId, Long ownerId) {
@@ -138,18 +144,25 @@ public class ReturnService {
             throw new BadRequestException("You are not authorized to confirm this return.");
         }
 
-        if (order.getStatus() != OrderStatus.RETURN_REQUESTED && order.getStatus() != OrderStatus.RETURN_INSPECTION_PENDING) {
-            throw new BadRequestException("Return can only be confirmed for pending return orders. Current status: " + order.getStatus());
+        OrderStatus currentStatus = order.getStatus();
+
+        // Check if already returned / duplicate update prevention
+        if (currentStatus == OrderStatus.RETURNED || currentStatus == OrderStatus.RETURN_CONFIRMED) {
+            throw new BadRequestException("This order return has already been confirmed.");
+        }
+
+        if (currentStatus != OrderStatus.RETURN_REQUESTED && currentStatus != OrderStatus.RETURN_INSPECTION_PENDING) {
+            throw new BadRequestException("Return can only be confirmed for pending return orders. Current status: " + currentStatus);
         }
 
         Resource resource = order.getResource();
 
-        // 1. Update Order Status
-        order.setStatus(OrderStatus.RETURN_CONFIRMED);
+        // 1. Update Order Status to RETURNED
+        order.setStatus(OrderStatus.RETURNED);
         order.setReturnConfirmedAt(LocalDateTime.now());
         Order updatedOrder = orderRepository.save(order);
 
-        // 2. Safely Restore Available Quantity and Rented Quantity
+        // 2. Safely Restore Available Quantity and Decrement Rented Quantity
         int restoredAvailable = resource.getAvailableQuantity() + order.getQuantity();
         int restoredRented = Math.max(0, (resource.getRentedQuantity() != null ? resource.getRentedQuantity() : order.getQuantity()) - order.getQuantity());
 
@@ -162,18 +175,23 @@ public class ReturnService {
             resource.setStatus("PARTIALLY_RENTED");
         }
 
+        // 3. Save the updated product in the database
         resourceRepository.save(resource);
 
-        // 3. Send Notification to Borrower
+        // 4. Send Notification to Borrower
         notificationService.createNotification(
                 order.getCustomer(),
                 updatedOrder,
                 "Return Confirmed",
-                "Your return of " + order.getQuantity() + " " + resource.getItemName() + " has been confirmed by " + resource.getOwner().getFullName() + ".",
+                "Your return of " + order.getQuantity() + " unit(s) of " + resource.getItemName() + " has been confirmed by " + resource.getOwner().getFullName() + ". Status: RETURNED.",
                 NotificationType.RETURN_CONFIRMED
         );
 
-        System.out.println("✅ [Return Confirmed] Order ID: " + orderId + " | Restored Avail Qty: " + restoredAvailable + " | Restored Rented Qty: " + restoredRented);
+        System.out.println("✅ [Return Confirmed & Quantity Restored] Order ID: " + orderId + 
+                           " | Restored Qty: +" + order.getQuantity() + 
+                           " | New Available Qty: " + restoredAvailable + 
+                           " | New Rented Qty: " + restoredRented + 
+                           " | Order Status: RETURNED");
 
         return orderService.mapToResponse(updatedOrder);
     }
@@ -188,6 +206,11 @@ public class ReturnService {
 
         if (!order.getOwner().getId().equals(ownerId)) {
             throw new BadRequestException("You are not authorized to report damage for this order.");
+        }
+
+        OrderStatus currentStatus = order.getStatus();
+        if (currentStatus == OrderStatus.DAMAGE_REPORTED || currentStatus == OrderStatus.RETURNED) {
+            throw new BadRequestException("Return inspection has already been finalized for this order.");
         }
 
         Resource resource = order.getResource();
@@ -211,8 +234,9 @@ public class ReturnService {
 
         DamageReport savedReport = damageReportRepository.save(damageReport);
 
-        // Update Order Status
+        // Update Order Status to DAMAGE_REPORTED
         order.setStatus(OrderStatus.DAMAGE_REPORTED);
+        order.setReturnConfirmedAt(LocalDateTime.now());
         orderRepository.save(order);
 
         // Restore quantity so inventory is not permanently locked
@@ -220,6 +244,11 @@ public class ReturnService {
         int restoredRented = Math.max(0, (resource.getRentedQuantity() != null ? resource.getRentedQuantity() : order.getQuantity()) - order.getQuantity());
         resource.setAvailableQuantity(restoredAvailable);
         resource.setRentedQuantity(restoredRented);
+        if (restoredRented == 0) {
+            resource.setStatus("AVAILABLE");
+        } else {
+            resource.setStatus("PARTIALLY_RENTED");
+        }
         resourceRepository.save(resource);
 
         // Send Notification to Borrower

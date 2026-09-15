@@ -11,5 +11,7 @@ public enum OrderStatus {
     DAMAGE_REPORTED,
     ACTIVE,
     RETURNED,
-    CANCELLED
+    CANCELLED,
+    CANCELLED_BY_CUSTOMER,
+    CANCELLED_BY_VENDOR
 }

@@ -10,7 +10,16 @@ import { MyOrderCard } from '../components/MyOrderCard';
 import { ReceivedRequestCard } from '../components/ReceivedRequestCard';
 import './MyOrders.css';
 
-const STATUS_FILTERS = ['ALL', 'PENDING', 'ACCEPTED', 'RETURN_REQUESTED', 'RETURN_CONFIRMED', 'REJECTED'];
+const STATUS_FILTERS = [
+  'ALL', 
+  'PENDING', 
+  'ACCEPTED', 
+  'RETURN_REQUESTED', 
+  'RETURNED', 
+  'CANCELLED_BY_CUSTOMER', 
+  'CANCELLED_BY_VENDOR', 
+  'REJECTED'
+];
 
 export const MyOrders = ({ 
   initialTab = 'my-requests', 
@@ -67,7 +76,7 @@ export const MyOrders = ({
       if (res.data) {
         setActionFeedback({
           type: 'success',
-          message: `✅ Order #${orderId} accepted successfully! Available product quantity has been updated.`,
+          message: `✅ Order #${orderId} accepted successfully! Available product quantity has been deducted.`,
         });
         fetchAllOrders();
       }
@@ -98,6 +107,46 @@ export const MyOrders = ({
     }
   };
 
+  // Customer Cancels Order
+  const handleCancelByCustomer = async (orderId) => {
+    setActionFeedback(null);
+    try {
+      const res = await api.cancelOrderByCustomer(orderId);
+      if (res.data) {
+        setActionFeedback({
+          type: 'success',
+          message: `Order #${orderId} has been cancelled. Any deducted product quantity was restored.`,
+        });
+        fetchAllOrders();
+      }
+    } catch (err) {
+      setActionFeedback({
+        type: 'error',
+        message: err.response?.data?.message || 'Failed to cancel order.',
+      });
+    }
+  };
+
+  // Vendor Cancels Order
+  const handleCancelByVendor = async (orderId) => {
+    setActionFeedback(null);
+    try {
+      const res = await api.cancelOrderByVendor(orderId);
+      if (res.data) {
+        setActionFeedback({
+          type: 'success',
+          message: `Order #${orderId} was cancelled by you. Product quantity has been restored to your inventory.`,
+        });
+        fetchAllOrders();
+      }
+    } catch (err) {
+      setActionFeedback({
+        type: 'error',
+        message: err.response?.data?.message || 'Failed to cancel order.',
+      });
+    }
+  };
+
   // Borrower Return Request
   const handleOpenReturnModal = (order) => {
     setSelectedOrderForReturn(order);
@@ -114,7 +163,7 @@ export const MyOrders = ({
       await returnService.requestReturn(selectedOrderForReturn.id, returnNote);
       setActionFeedback({
         type: 'success',
-        message: `🔄 Return requested for "${selectedOrderForReturn.itemName}". The owner will inspect the equipment and confirm the return.`,
+        message: `🔄 Return requested for "${selectedOrderForReturn.itemName}". The owner will inspect the equipment and confirm the return to restore available quantity.`,
       });
       setSelectedOrderForReturn(null);
       fetchAllOrders();
@@ -132,6 +181,7 @@ export const MyOrders = ({
   const currentList = activeTab === 'my-requests' ? myOrders : receivedOrders;
   const filteredList = currentList.filter((order) => {
     if (statusFilter === 'ALL') return true;
+    if (statusFilter === 'RETURNED' && (order.status === 'RETURN_CONFIRMED' || order.status === 'RETURNED')) return true;
     return order.status === statusFilter;
   });
 
@@ -155,7 +205,7 @@ export const MyOrders = ({
             My Orders &amp; Rental Requests
           </h1>
           <p className="text-xs sm:text-sm text-slate-400 mt-1">
-            Track your rental requests, return borrowed items, and manage incoming orders for your listed resources.
+            Track rental orders, cancel requests, return borrowed products, and manage received requests with real-time inventory updates.
           </p>
         </div>
 
@@ -245,7 +295,7 @@ export const MyOrders = ({
                 : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 border border-slate-800'
             }`}
           >
-            {status === 'ALL' ? 'All Orders' : status.replace('_', ' ')}
+            {status === 'ALL' ? 'All Orders' : status.replace(/_/g, ' ')}
           </button>
         ))}
       </div>
@@ -281,6 +331,7 @@ export const MyOrders = ({
                 key={order.id} 
                 order={order}
                 onRequestReturn={handleOpenReturnModal}
+                onCancelOrder={handleCancelByCustomer}
               />
             ))}
           </div>
@@ -294,6 +345,7 @@ export const MyOrders = ({
                 order={order} 
                 onAccept={handleAcceptOrder}
                 onReject={handleRejectOrder}
+                onCancel={handleCancelByVendor}
                 onInspectReturn={onNavigateToReturnInspect}
               />
             ))}

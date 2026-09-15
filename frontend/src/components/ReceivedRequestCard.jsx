@@ -4,7 +4,7 @@ import {
   Layers, Image as ImageIcon, RefreshCw, RotateCcw, ShieldCheck, AlertTriangle 
 } from 'lucide-react';
 
-export const ReceivedRequestCard = ({ order, onAccept, onReject, onInspectReturn }) => {
+export const ReceivedRequestCard = ({ order, onAccept, onReject, onCancel, onInspectReturn }) => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   const formatCurrency = (amount) => {
@@ -33,7 +33,18 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onInspectReturn
     }
   };
 
+  const handleCancel = async () => {
+    if (!onCancel) return;
+    setIsProcessing(true);
+    try {
+      await onCancel(order.id);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const isReturnPending = order.status === 'RETURN_REQUESTED' || order.status === 'RETURN_INSPECTION_PENDING';
+  const isAcceptedActive = order.status === 'ACCEPTED' || order.status === 'RENTED' || order.status === 'ACTIVE';
 
   return (
     <div className="glass-panel rounded-2xl border border-slate-800/90 p-5 space-y-4 hover:border-slate-700 transition-all">
@@ -64,7 +75,7 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onInspectReturn
               <span>NEW REQUEST</span>
             </span>
           )}
-          {order.status === 'ACCEPTED' && (
+          {isAcceptedActive && (
             <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
               <span>RENTED / ACTIVE</span>
@@ -82,10 +93,22 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onInspectReturn
               <span>INSPECTION PENDING</span>
             </span>
           )}
-          {order.status === 'RETURN_CONFIRMED' && (
+          {(order.status === 'RETURN_CONFIRMED' || order.status === 'RETURNED') && (
             <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30 flex items-center gap-1">
               <CheckCircle2 className="w-3 h-3 text-teal-400" />
-              <span>RETURN CONFIRMED</span>
+              <span>RETURNED</span>
+            </span>
+          )}
+          {order.status === 'CANCELLED_BY_CUSTOMER' && (
+            <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-slate-800 text-slate-400 border border-slate-700 flex items-center gap-1">
+              <XCircle className="w-3 h-3 text-slate-400" />
+              <span>CANCELLED BY CUSTOMER</span>
+            </span>
+          )}
+          {order.status === 'CANCELLED_BY_VENDOR' && (
+            <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 flex items-center gap-1">
+              <XCircle className="w-3 h-3 text-rose-400" />
+              <span>CANCELLED BY YOU</span>
             </span>
           )}
           {order.status === 'DAMAGE_REPORTED' && (
@@ -142,7 +165,7 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onInspectReturn
         <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-800">
           <div className="text-xs text-blue-300 font-semibold flex items-center gap-1.5">
             <RotateCcw className="w-4 h-4 text-blue-400" />
-            <span>Borrower returned this item. Inspection required before confirming.</span>
+            <span>Borrower returned this item. Inspection required before confirming return and restoring quantity.</span>
           </div>
 
           <button
@@ -185,17 +208,47 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onInspectReturn
         </div>
       )}
 
-      {order.status === 'ACCEPTED' && (
-        <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-          <span>Active rental. Available quantity was deducted from your listing.</span>
+      {/* ACCEPTED / RENTED: Vendor Cancellation Button */}
+      {isAcceptedActive && (
+        <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-800">
+          <div className="text-xs text-emerald-300 font-medium flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+            <span>Active rental. Available quantity was deducted from your inventory.</span>
+          </div>
+
+          {onCancel && (
+            <button
+              type="button"
+              disabled={isProcessing}
+              onClick={handleCancel}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-rose-500/20 border border-slate-800 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 text-xs font-semibold transition-all disabled:opacity-50 flex-shrink-0"
+              title="Cancel this order and restore product quantity"
+            >
+              {isProcessing ? <RefreshCw className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}
+              <span>Cancel Order</span>
+            </button>
+          )}
         </div>
       )}
 
-      {order.status === 'RETURN_CONFIRMED' && (
+      {(order.status === 'RETURN_CONFIRMED' || order.status === 'RETURNED') && (
         <div className="p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/20 text-teal-300 text-xs flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4 text-teal-400 flex-shrink-0" />
-          <span>Return completed and confirmed. Quantity has been restored to your inventory.</span>
+          <span>Return completed and confirmed. Product quantity has been restored to your available inventory.</span>
+        </div>
+      )}
+
+      {order.status === 'CANCELLED_BY_VENDOR' && (
+        <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
+          <XCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          <span>You cancelled this order. Product quantity was restored to your available inventory.</span>
+        </div>
+      )}
+
+      {order.status === 'CANCELLED_BY_CUSTOMER' && (
+        <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 text-xs flex items-center gap-2">
+          <XCircle className="w-4 h-4 text-slate-500 flex-shrink-0" />
+          <span>Customer cancelled this order. Product quantity is available in your inventory.</span>
         </div>
       )}
     </div>

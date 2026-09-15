@@ -40,7 +40,8 @@ public class OrderService {
     }
 
     /**
-     * Customer creates a new rental order request.
+     * 1. Customer creates a new rental order request.
+     * Rule: Do NOT reduce available quantity when the customer only sends a request.
      */
     @Transactional
     public OrderResponse createOrder(Long customerId, CreateOrderRequest request) {
@@ -65,7 +66,7 @@ public class OrderService {
                                           ") exceeds current available quantity (" + resource.getAvailableQuantity() + ").");
         }
 
-        // Create Order with PENDING status
+        // Create Order with PENDING status (Quantity in Resource is NOT reduced yet)
         Order order = new Order(
                 resource,
                 customer,
@@ -116,8 +117,8 @@ public class OrderService {
     }
 
     /**
-     * Vendor/Owner accepts an order request.
-     * Decrements available quantity and increments rented quantity in Resource atomically with @Transactional.
+     * 2. Vendor/Owner accepts an order request.
+     * Rule: Reduce available quantity ONLY when the vendor accepts the request.
      */
     @Transactional
     public OrderResponse acceptOrder(Long orderId, Long ownerId) {
@@ -140,7 +141,7 @@ public class OrderService {
                                           ") exceeds current available quantity (" + resource.getAvailableQuantity() + ").");
         }
 
-        // Deduct available quantity and add to rented quantity
+        // Deduct available quantity and add to rented quantity atomically
         int newAvailable = resource.getAvailableQuantity() - order.getQuantity();
         int newRented = (resource.getRentedQuantity() != null ? resource.getRentedQuantity() : 0) + order.getQuantity();
         resource.setAvailableQuantity(newAvailable);
@@ -154,7 +155,7 @@ public class OrderService {
 
         resourceRepository.save(resource);
 
-        // Update Order Status
+        // Update Order Status to ACCEPTED
         order.setStatus(OrderStatus.ACCEPTED);
         Order updatedOrder = orderRepository.save(order);
 
@@ -163,7 +164,7 @@ public class OrderService {
                 order.getCustomer(),
                 updatedOrder,
                 "Request Accepted",
-                "Your rental request for " + resource.getItemName() + " was accepted.",
+                "Your rental request for " + resource.getItemName() + " was accepted by " + order.getOwner().getFullName() + ".",
                 NotificationType.ORDER_ACCEPTED
         );
 
@@ -173,7 +174,8 @@ public class OrderService {
     }
 
     /**
-     * Vendor/Owner rejects an order request.
+     * 3. Vendor/Owner rejects a pending order request.
+     * Rule: Zero quantity change since quantity was never deducted.
      */
     @Transactional
     public OrderResponse rejectOrder(Long orderId, Long ownerId) {
@@ -199,6 +201,125 @@ public class OrderService {
                 "Your rental request for " + order.getResource().getItemName() + " was rejected.",
                 NotificationType.ORDER_REJECTED
         );
+
+        return mapToResponse(updatedOrder);
+    }
+
+    /**
+     * 4. Customer cancels their order request.
+     * Rules:
+     * - If PENDING: Set CANCELLED_BY_CUSTOMER, no quantity change (never deducted).
+     * - If ACCEPTED/RENTED/ACTIVE: Set CANCELLED_BY_CUSTOMER, restore ordered quantity to available quantity.
+     * - Prevent duplicate quantity restoration.
+     */
+    @Transactional
+    public OrderResponse cancelOrderByCustomer(Long orderId, Long customerId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
+
+        if (!order.getCustomer().getId().equals(customerId)) {
+            throw new BadRequestException("You are not authorized to cancel this order.");
+        }
+
+        OrderStatus currentStatus = order.getStatus();
+
+        // Check if already cancelled or returned (Idempotency safeguard)
+        if (currentStatus == OrderStatus.CANCELLED_BY_CUSTOMER ||
+            currentStatus == OrderStatus.CANCELLED_BY_VENDOR ||
+            currentStatus == OrderStatus.CANCELLED ||
+            currentStatus == OrderStatus.RETURNED ||
+            currentStatus == OrderStatus.RETURN_CONFIRMED ||
+            currentStatus == OrderStatus.REJECTED) {
+            throw new BadRequestException("Order cannot be cancelled. Current status: " + currentStatus);
+        }
+
+        Resource resource = order.getResource();
+
+        if (currentStatus == OrderStatus.PENDING) {
+            // Pending request was never accepted -> do NOT change product quantity
+            order.setStatus(OrderStatus.CANCELLED_BY_CUSTOMER);
+        } else if (currentStatus == OrderStatus.ACCEPTED || 
+                   currentStatus == OrderStatus.RENTED || 
+                   currentStatus == OrderStatus.ACTIVE) {
+            // Accepted order had quantity deducted -> restore quantity
+            restoreResourceQuantity(resource, order.getQuantity());
+            order.setStatus(OrderStatus.CANCELLED_BY_CUSTOMER);
+        } else {
+            throw new BadRequestException("Cannot cancel order in status: " + currentStatus);
+        }
+
+        Order updatedOrder = orderRepository.save(order);
+
+        // Notify Vendor
+        notificationService.createNotification(
+                order.getOwner(),
+                updatedOrder,
+                "Order Cancelled by Customer",
+                order.getCustomer().getFullName() + " cancelled the rental order for " + resource.getItemName() + ".",
+                NotificationType.ORDER_CANCELLED
+        );
+
+        System.out.println("❌ [Cancelled by Customer] Order ID: " + orderId + " | Previous Status: " + currentStatus + " | New Status: CANCELLED_BY_CUSTOMER");
+
+        return mapToResponse(updatedOrder);
+    }
+
+    /**
+     * 5. Vendor cancels an order (even after accepting it).
+     * Rules:
+     * - If PENDING: Set CANCELLED_BY_VENDOR, no quantity change.
+     * - If ACCEPTED/RENTED/ACTIVE: Set CANCELLED_BY_VENDOR, restore ordered quantity to available quantity.
+     * - Notify the customer.
+     * - Prevent duplicate quantity restoration.
+     */
+    @Transactional
+    public OrderResponse cancelOrderByVendor(Long orderId, Long vendorId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Order not found with id: " + orderId));
+
+        if (!order.getOwner().getId().equals(vendorId)) {
+            throw new BadRequestException("You are not authorized to cancel this order.");
+        }
+
+        OrderStatus currentStatus = order.getStatus();
+
+        // Check if already cancelled or returned (Idempotency safeguard)
+        if (currentStatus == OrderStatus.CANCELLED_BY_CUSTOMER ||
+            currentStatus == OrderStatus.CANCELLED_BY_VENDOR ||
+            currentStatus == OrderStatus.CANCELLED ||
+            currentStatus == OrderStatus.RETURNED ||
+            currentStatus == OrderStatus.RETURN_CONFIRMED ||
+            currentStatus == OrderStatus.REJECTED) {
+            throw new BadRequestException("Order cannot be cancelled. Current status: " + currentStatus);
+        }
+
+        Resource resource = order.getResource();
+
+        if (currentStatus == OrderStatus.PENDING) {
+            // Pending request was never accepted -> do NOT change product quantity
+            order.setStatus(OrderStatus.CANCELLED_BY_VENDOR);
+        } else if (currentStatus == OrderStatus.ACCEPTED || 
+                   currentStatus == OrderStatus.RENTED || 
+                   currentStatus == OrderStatus.ACTIVE) {
+            // Accepted order had quantity deducted -> restore quantity
+            restoreResourceQuantity(resource, order.getQuantity());
+            order.setStatus(OrderStatus.CANCELLED_BY_VENDOR);
+        } else {
+            throw new BadRequestException("Cannot cancel order in status: " + currentStatus);
+        }
+
+        Order updatedOrder = orderRepository.save(order);
+
+        // Notify Customer
+        notificationService.createNotification(
+                order.getCustomer(),
+                updatedOrder,
+                "Order Cancelled by Vendor",
+                "Vendor " + order.getOwner().getFullName() + " cancelled the rental order for " + resource.getItemName() + ".",
+                NotificationType.ORDER_CANCELLED
+        );
+
+        System.out.println("❌ [Cancelled by Vendor] Order ID: " + orderId + " | Previous Status: " + currentStatus + " | New Status: CANCELLED_BY_VENDOR");
 
         return mapToResponse(updatedOrder);
     }
@@ -238,6 +359,27 @@ public class OrderService {
         System.out.println("🔄 [Return Requested] Order ID: " + orderId + " by " + order.getCustomer().getFullName());
 
         return mapToResponse(updated);
+    }
+
+    /**
+     * Helper to safely restore quantity back to product inventory and update resource status.
+     */
+    private void restoreResourceQuantity(Resource resource, int quantityToRestore) {
+        int restoredAvailable = resource.getAvailableQuantity() + quantityToRestore;
+        int restoredRented = Math.max(0, (resource.getRentedQuantity() != null ? resource.getRentedQuantity() : quantityToRestore) - quantityToRestore);
+
+        resource.setAvailableQuantity(restoredAvailable);
+        resource.setRentedQuantity(restoredRented);
+
+        if (restoredRented == 0) {
+            resource.setStatus("AVAILABLE");
+        } else {
+            resource.setStatus("PARTIALLY_RENTED");
+        }
+
+        resourceRepository.save(resource);
+        System.out.println("📦 [Quantity Restored] Resource ID: " + resource.getId() + " | Restored Qty: +" + quantityToRestore + 
+                           " | New Avail: " + restoredAvailable + " | New Rented: " + restoredRented);
     }
 
     /**

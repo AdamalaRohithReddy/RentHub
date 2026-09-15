@@ -53,7 +53,7 @@ public class AuthController {
     }
 
     @PostMapping(value = "/register", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @Operation(summary = "Step 4: Submit registration with Aadhaar & PAN KYC files and save to MySQL")
+    @Operation(summary = "Step 4: Submit registration with mandatory Aadhaar and optional PAN KYC files")
     public ResponseEntity<AuthResponse> register(
             @RequestParam("fullName") String fullName,
             @RequestParam("email") String email,
@@ -61,7 +61,7 @@ public class AuthController {
             @RequestParam("password") String password,
             @RequestParam("aadhaarNumber") String aadhaarNumber,
             @RequestParam("aadhaarDoc") MultipartFile aadhaarDoc,
-            @RequestParam("panDoc") MultipartFile panDoc,
+            @RequestParam(value = "panDoc", required = false) MultipartFile panDoc,
             @RequestParam(value = "ocrExtractedText", required = false) String ocrExtractedText) {
 
         RegisterRequest request = new RegisterRequest();

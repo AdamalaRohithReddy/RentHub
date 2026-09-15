@@ -17,7 +17,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/orders")
-@Tag(name = "Orders & Rental Requests", description = "Endpoints for creating, managing, and tracking rental requests and returns")
+@Tag(name = "Orders & Rental Requests", description = "Endpoints for creating, managing, and tracking rental requests, cancellations, and returns")
 public class OrderController {
 
     private final OrderService orderService;
@@ -87,6 +87,34 @@ public class OrderController {
         }
 
         OrderResponse response = orderService.rejectOrder(orderId, currentUser.getId());
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{orderId}/cancel-customer")
+    @Operation(summary = "Customer cancels their order request. Restores product quantity if previously accepted.")
+    public ResponseEntity<OrderResponse> cancelOrderByCustomer(
+            @PathVariable Long orderId,
+            @AuthenticationPrincipal UserPrincipal currentUser
+    ) {
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        OrderResponse response = orderService.cancelOrderByCustomer(orderId, currentUser.getId());
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{orderId}/cancel-vendor")
+    @Operation(summary = "Vendor cancels an order request (even after accepting). Restores product quantity.")
+    public ResponseEntity<OrderResponse> cancelOrderByVendor(
+            @PathVariable Long orderId,
+            @AuthenticationPrincipal UserPrincipal currentUser
+    ) {
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        OrderResponse response = orderService.cancelOrderByVendor(orderId, currentUser.getId());
         return ResponseEntity.ok(response);
     }
 

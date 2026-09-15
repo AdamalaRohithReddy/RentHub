@@ -128,12 +128,9 @@ public class AuthService {
             throw new BadRequestException("Aadhaar number must be exactly 12 numeric digits.");
         }
 
+        // Aadhaar document remains strictly mandatory
         if (aadhaarDoc == null || aadhaarDoc.isEmpty()) {
             throw new BadRequestException("Aadhaar document photo is mandatory for KYC.");
-        }
-
-        if (panDoc == null || panDoc.isEmpty()) {
-            throw new BadRequestException("PAN card document photo is mandatory for KYC.");
         }
 
         // REAL AADHAAR OCR VERIFICATION & STRICT DOCUMENT-TO-INPUT MATCHING
@@ -142,9 +139,14 @@ public class AuthService {
             throw new BadRequestException("Aadhaar verification failed: " + ocrResult.getMessage());
         }
 
-        // Store KYC files in separate dedicated folders: uploads/kyc/aadhaar/ and uploads/kyc/pan/
+        // Store Aadhaar KYC file
         String aadhaarPath = fileStorageService.storeKycFile(aadhaarDoc, "aadhaar", "aadhaar");
-        String panPath = fileStorageService.storeKycFile(panDoc, "pan", "pan");
+        
+        // PAN card is optional
+        String panPath = null;
+        if (panDoc != null && !panDoc.isEmpty()) {
+            panPath = fileStorageService.storeKycFile(panDoc, "pan", "pan");
+        }
 
         // Mask Aadhaar for storage: "XXXX XXXX 9012"
         String maskedAadhaar = documentValidationService.maskAadhaar(cleanAadhaar);
@@ -179,7 +181,7 @@ public class AuthService {
         emailService.sendEmail(
             user.getEmail(),
             "Welcome to RentHub - Registration Successful!",
-            "Hi " + user.getFullName() + ",\n\nYour registration on RentHub was successful! Your KYC documents have been recorded in the database.\n\nYou can now log in to borrow, rent, and share resources with your neighbors.\n\nBest regards,\nRentHub Community Team"
+            "Hi " + user.getFullName() + ",\n\nYour registration on RentHub was successful! Your KYC details have been recorded in the database.\n\nYou can now log in to borrow, rent, and share resources with your neighbors.\n\nBest regards,\nRentHub Community Team"
         );
 
         // Generate JWT Token
@@ -194,7 +196,7 @@ public class AuthService {
         System.out.println("Aadhaar Number: " + maskedAadhaar);
         System.out.println("Aadhaar OCR Status: DOCUMENT_DETAILS_MATCHED");
         System.out.println("Aadhaar Document: " + user.getAadhaarDocPath());
-        System.out.println("PAN Document: " + user.getPanDocPath());
+        System.out.println("PAN Document: " + (user.getPanDocPath() != null ? user.getPanDocPath() : "N/A (Optional)"));
         System.out.println("KYC Status: " + user.getKycStatus());
         System.out.println("Trust Score: " + user.getTrustScore());
         System.out.println("Saved in MySQL Database: renthub.users");
