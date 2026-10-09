@@ -46,6 +46,9 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onCancel, onIns
   const isReturnPending = order.status === 'RETURN_REQUESTED' || order.status === 'RETURN_INSPECTION_PENDING';
   const isAcceptedActive = order.status === 'ACCEPTED' || order.status === 'RENTED' || order.status === 'ACTIVE';
 
+  // Prevent accepting requests that exceed available stock
+  const hasInsufficientStock = order.resourceAvailableQuantity != null && order.resourceAvailableQuantity < order.quantity;
+
   return (
     <div className="glass-panel rounded-2xl border border-slate-800/90 p-5 space-y-4 hover:border-slate-700 transition-all">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -72,7 +75,7 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onCancel, onIns
           {order.status === 'PENDING' && (
             <span className="text-[11px] font-bold uppercase tracking-wider px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
               <Clock className="w-3 h-3 text-amber-400" />
-              <span>NEW REQUEST</span>
+              <span>PENDING REQUEST</span>
             </span>
           )}
           {isAcceptedActive && (
@@ -129,8 +132,15 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onCancel, onIns
       {/* Details Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
         <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
-          <span className="text-slate-400 block">Quantity:</span>
+          <span className="text-slate-400 block">Requested Qty:</span>
           <span className="text-white font-bold font-mono">{order.quantity} {order.quantity === 1 ? 'Unit' : 'Units'}</span>
+        </div>
+
+        <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
+          <span className="text-slate-400 block">Current Available:</span>
+          <span className={`font-bold font-mono ${order.resourceAvailableQuantity > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {order.resourceAvailableQuantity != null ? `${order.resourceAvailableQuantity} Units` : 'Check Inventory'}
+          </span>
         </div>
 
         <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
@@ -146,11 +156,6 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onCancel, onIns
             {formatCurrency((order.rentAmount || 0) * (order.quantity || 1))}
           </span>
         </div>
-
-        <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
-          <span className="text-slate-400 block">Request Date:</span>
-          <span className="text-slate-300 font-mono">{order.requestedAt ? new Date(order.requestedAt).toLocaleDateString() : 'Today'}</span>
-        </div>
       </div>
 
       {/* Return Note from Borrower */}
@@ -162,16 +167,16 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onCancel, onIns
 
       {/* Return Inspection Action Button */}
       {isReturnPending && onInspectReturn && (
-        <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-800">
+        <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-slate-800">
           <div className="text-xs text-blue-300 font-semibold flex items-center gap-1.5">
-            <RotateCcw className="w-4 h-4 text-blue-400" />
+            <RotateCcw className="w-4 h-4 text-blue-400 flex-shrink-0" />
             <span>Borrower returned this item. Inspection required before confirming return and restoring quantity.</span>
           </div>
 
           <button
             type="button"
             onClick={() => onInspectReturn(order.id)}
-            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition-all flex-shrink-0"
+            className="flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-md transition-all flex-shrink-0 self-stretch sm:self-auto justify-center"
           >
             <ShieldCheck className="w-4 h-4" />
             <span>📷 INSPECT RETURN</span>
@@ -181,36 +186,52 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onCancel, onIns
 
       {/* PENDING Action Buttons */}
       {order.status === 'PENDING' && (
-        <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-800">
-          <button
-            type="button"
-            disabled={isProcessing}
-            onClick={handleReject}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-red-500/10 border border-slate-800 hover:border-red-500/30 text-slate-400 hover:text-red-300 text-xs font-bold transition-all disabled:opacity-50"
-          >
-            <X className="w-3.5 h-3.5" />
-            <span>REJECT</span>
-          </button>
-
-          <button
-            type="button"
-            disabled={isProcessing}
-            onClick={handleAccept}
-            className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white text-xs font-bold shadow-glow hover:shadow-glow-lg transition-all disabled:opacity-50"
-          >
-            {isProcessing ? (
-              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+        <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-slate-800">
+          <div>
+            {hasInsufficientStock ? (
+              <span className="text-[11px] text-amber-300 bg-amber-500/10 border border-amber-500/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+                <span>Cannot accept: Requested {order.quantity} units exceed available stock ({order.resourceAvailableQuantity ?? 0})</span>
+              </span>
             ) : (
-              <Check className="w-3.5 h-3.5" />
+              <span className="text-[11px] text-emerald-400 font-medium">
+                ✓ Sufficient stock available to fulfill this request
+              </span>
             )}
-            <span>ACCEPT REQUEST</span>
-          </button>
+          </div>
+
+          <div className="flex items-center gap-3 justify-end">
+            <button
+              type="button"
+              disabled={isProcessing}
+              onClick={handleReject}
+              className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-red-500/10 border border-slate-800 hover:border-red-500/30 text-slate-400 hover:text-red-300 text-xs font-bold transition-all disabled:opacity-50"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>REJECT</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isProcessing || hasInsufficientStock}
+              onClick={handleAccept}
+              title={hasInsufficientStock ? "Requested quantity exceeds available stock" : "Accept request and deduct stock"}
+              className="flex items-center justify-center gap-1.5 px-5 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white text-xs font-bold shadow-glow hover:shadow-glow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {isProcessing ? (
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Check className="w-3.5 h-3.5" />
+              )}
+              <span>ACCEPT REQUEST</span>
+            </button>
+          </div>
         </div>
       )}
 
       {/* ACCEPTED / RENTED: Vendor Cancellation Button */}
       {isAcceptedActive && (
-        <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-800">
+        <div className="pt-2 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-t border-slate-800">
           <div className="text-xs text-emerald-300 font-medium flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
             <span>Active rental. Available quantity was deducted from your inventory.</span>
@@ -221,7 +242,7 @@ export const ReceivedRequestCard = ({ order, onAccept, onReject, onCancel, onIns
               type="button"
               disabled={isProcessing}
               onClick={handleCancel}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-rose-500/20 border border-slate-800 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 text-xs font-semibold transition-all disabled:opacity-50 flex-shrink-0"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-rose-500/20 border border-slate-800 hover:border-rose-500/40 text-slate-300 hover:text-rose-300 text-xs font-semibold transition-all disabled:opacity-50 flex-shrink-0 self-stretch sm:self-auto justify-center"
               title="Cancel this order and restore product quantity"
             >
               {isProcessing ? <RefreshCw className="w-3 h-3 animate-spin" /> : <X className="w-3 h-3" />}

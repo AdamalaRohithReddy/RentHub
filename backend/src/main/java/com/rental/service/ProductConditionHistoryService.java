@@ -6,6 +6,7 @@ import com.rental.entity.ConditionIssueHistory;
 import com.rental.entity.Order;
 import com.rental.entity.ProductConditionHistory;
 import com.rental.entity.Resource;
+import com.rental.entity.User;
 import com.rental.entity.enums.ConditionScanType;
 import com.rental.repository.ProductConditionHistoryRepository;
 import org.springframework.stereotype.Service;
@@ -27,9 +28,15 @@ public class ProductConditionHistoryService {
             Resource resource,
             Order order,
             FinalConditionScanResponse scan,
-            ConditionScanType scanType
+            ConditionScanType scanType,
+            List<String> imageUrls,
+            User assessor,
+            Boolean isManualOverride,
+            String ownerNotes
     ) {
         if (resource == null || scan == null) return null;
+
+        String joinedImageUrls = (imageUrls != null && !imageUrls.isEmpty()) ? String.join(",", imageUrls) : null;
 
         ProductConditionHistory history = new ProductConditionHistory(
                 resource,
@@ -38,7 +45,11 @@ public class ProductConditionHistoryService {
                 scan.getConditionStatus(),
                 scan.getConfidenceScore(),
                 scanType,
-                scan.getScanResult()
+                scan.getScanResult(),
+                joinedImageUrls,
+                assessor,
+                isManualOverride,
+                ownerNotes
         );
 
         if (scan.getIssues() != null) {
@@ -53,6 +64,16 @@ public class ProductConditionHistoryService {
         }
 
         return historyRepository.save(history);
+    }
+
+    @Transactional
+    public ProductConditionHistory recordConditionHistory(
+            Resource resource,
+            Order order,
+            FinalConditionScanResponse scan,
+            ConditionScanType scanType
+    ) {
+        return recordConditionHistory(resource, order, scan, scanType, null, null, false, null);
     }
 
     @Transactional(readOnly = true)

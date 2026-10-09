@@ -77,4 +77,18 @@ public class NotificationController {
         notificationService.markAllAsRead(currentUser.getId());
         return ResponseEntity.ok().build();
     }
+
+    @DeleteMapping("/{id}")
+    @Operation(summary = "Delete single notification for current user")
+    public ResponseEntity<Void> deleteNotification(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal currentUser
+    ) {
+        if (currentUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+        notificationService.deleteNotification(id, currentUser.getId());
+        return ResponseEntity.noContent().build();
+    }
 }

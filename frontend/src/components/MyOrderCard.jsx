@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Tag, Calendar, User, Clock, CheckCircle2, XCircle, 
-  AlertCircle, Image as ImageIcon, RotateCcw, AlertTriangle, ShieldCheck, X 
+  AlertCircle, Image as ImageIcon, RotateCcw, AlertTriangle, ShieldCheck, X, Shield 
 } from 'lucide-react';
 
 export const MyOrderCard = ({ order, onRequestReturn, onCancelOrder }) => {
@@ -139,9 +139,33 @@ export const MyOrderCard = ({ order, onRequestReturn, onCancelOrder }) => {
         </div>
 
         <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800/80">
-          <span className="text-slate-400 block">Requested Date:</span>
-          <span className="text-slate-300 font-mono">{order.requestedAt ? new Date(order.requestedAt).toLocaleDateString() : 'Today'}</span>
+          <span className="text-slate-400 block">Security Deposit:</span>
+          <span className="text-slate-300 font-mono">
+            {order.securityDeposit ? formatCurrency(order.securityDeposit) : '₹0'}
+          </span>
         </div>
+      </div>
+
+      {/* Timeline Dates */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400 border-t border-slate-850 pt-2">
+        <span className="flex items-center gap-1 font-mono">
+          <Calendar className="w-3 h-3 text-slate-500" />
+          <span>Requested: {order.requestedAt ? new Date(order.requestedAt).toLocaleDateString() : 'Today'}</span>
+        </span>
+
+        {order.returnRequestedAt && (
+          <span className="flex items-center gap-1 font-mono text-blue-400">
+            <RotateCcw className="w-3 h-3" />
+            <span>Return Requested: {new Date(order.returnRequestedAt).toLocaleDateString()}</span>
+          </span>
+        )}
+
+        {order.returnConfirmedAt && (
+          <span className="flex items-center gap-1 font-mono text-teal-400">
+            <CheckCircle2 className="w-3 h-3" />
+            <span>Completed: {new Date(order.returnConfirmedAt).toLocaleDateString()}</span>
+          </span>
+        )}
       </div>
 
       {/* PENDING: Allow Customer to Cancel */}

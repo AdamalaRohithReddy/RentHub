@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Bell, Check, CheckCheck, RefreshCw, Sparkles, Clock, AlertCircle, ShoppingBag } from 'lucide-react';
 import { api } from '../api/client';
 
-export const NotificationBell = ({ onNavigateToOrdersTab }) => {
+export const NotificationBell = ({ onNavigateToOrdersTab, onNavigateToNotifications }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState([]);
@@ -90,7 +90,7 @@ export const NotificationBell = ({ onNavigateToOrdersTab }) => {
     setIsOpen(false);
 
     if (onNavigateToOrdersTab) {
-      if (item.type === 'ORDER_REQUEST') {
+      if (item.type === 'ORDER_REQUEST' || item.type === 'RETURN_REQUEST') {
         onNavigateToOrdersTab('requests-received');
       } else {
         onNavigateToOrdersTab('my-requests');
@@ -210,15 +210,28 @@ export const NotificationBell = ({ onNavigateToOrdersTab }) => {
 
           {/* Footer */}
           {notifications.length > 0 && (
-            <div className="p-2.5 bg-slate-950 border-t border-slate-800 text-center">
+            <div className="p-2.5 bg-slate-950 border-t border-slate-800 flex items-center justify-between px-3 text-xs">
+              <button
+                onClick={() => {
+                  setIsOpen(false);
+                  if (onNavigateToNotifications) {
+                    onNavigateToNotifications();
+                  } else if (onNavigateToOrdersTab) {
+                    onNavigateToOrdersTab('my-requests');
+                  }
+                }}
+                className="text-brand-400 hover:text-brand-300 font-semibold"
+              >
+                View all notifications ➔
+              </button>
               <button
                 onClick={() => {
                   setIsOpen(false);
                   if (onNavigateToOrdersTab) onNavigateToOrdersTab('my-requests');
                 }}
-                className="text-xs text-brand-400 hover:text-brand-300 font-semibold"
+                className="text-[11px] text-slate-400 hover:text-slate-200"
               >
-                View all in My Orders ➔
+                My Orders
               </button>
             </div>
           )}

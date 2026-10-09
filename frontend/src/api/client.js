@@ -128,6 +128,7 @@ export const api = {
   getUnreadCount: () => client.get('/notifications/unread-count'),
   markNotificationAsRead: (id) => client.put(`/notifications/${id}/read`),
   markAllNotificationsAsRead: () => client.put('/notifications/read-all'),
+  deleteNotification: (id) => client.delete(`/notifications/${id}`),
 };
 
 export default client;

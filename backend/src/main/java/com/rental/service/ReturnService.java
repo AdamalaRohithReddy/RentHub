@@ -18,12 +18,21 @@ import com.rental.repository.DamageReportRepository;
 import com.rental.repository.OrderRepository;
 import com.rental.repository.ResourceRepository;
 import com.rental.service.ConditionComparisonService.ConditionComparisonResult;
+import com.rental.entity.ResourceImage;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -54,6 +63,16 @@ public class ReturnService {
         this.historyService = historyService;
         this.notificationService = notificationService;
         this.orderService = orderService;
+    }
+
+    /**
+     * Converts a user's full name to a safe folder name (e.g. "Rohith Reddy" -> "Rohith-Reddy")
+     */
+    public String toSafeFolderName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return "user-default";
+        }
+        return name.trim().replaceAll("[^a-zA-Z0-9.-]", "-").replaceAll("-+", "-");
     }
 
     /**
@@ -94,13 +113,46 @@ public class ReturnService {
             throw new BadRequestException("You are not authorized to inspect this returned item.");
         }
 
+        OrderStatus status = order.getStatus();
+        if (status == OrderStatus.RETURNED || status == OrderStatus.RETURN_CONFIRMED || status == OrderStatus.DAMAGE_REPORTED) {
+            throw new BadRequestException("Return inspection has already been completed for this order. Current status: " + status);
+        }
+        if (status == OrderStatus.CANCELLED_BY_CUSTOMER || status == OrderStatus.CANCELLED_BY_VENDOR || status == OrderStatus.REJECTED) {
+            throw new BadRequestException("Cannot inspect a cancelled or rejected order.");
+        }
+
         if (photos == null || photos.isEmpty()) {
             throw new BadRequestException("Please capture at least 3 camera photos of the returned item.");
         }
 
         Resource resource = order.getResource();
+        User owner = order.getOwner();
 
-        // Run multi-angle visual condition scan on returned photos
+        // 1. Save returned camera inspection photos to disk under user's returns directory
+        String safeUsername = toSafeFolderName(owner.getFullName());
+        Path returnsFolder = Paths.get("uploads/products").resolve(safeUsername).resolve("returns").normalize();
+        try {
+            Files.createDirectories(returnsFolder);
+        } catch (IOException e) {
+            throw new RuntimeException("Could not create return uploads directory: " + returnsFolder, e);
+        }
+
+        List<String> returnedImageUrls = new ArrayList<>();
+        for (MultipartFile photo : photos) {
+            if (photo == null || photo.isEmpty()) continue;
+            String orig = StringUtils.cleanPath(photo.getOriginalFilename() != null ? photo.getOriginalFilename() : "return.jpg");
+            String ext = orig.contains(".") ? orig.substring(orig.lastIndexOf('.')) : ".jpg";
+            String uniqueName = "return_" + orderId + "_" + UUID.randomUUID().toString() + ext;
+            Path target = returnsFolder.resolve(uniqueName).normalize();
+            try {
+                Files.copy(photo.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+                returnedImageUrls.add("/uploads/products/" + safeUsername + "/returns/" + uniqueName);
+            } catch (IOException ex) {
+                throw new RuntimeException("Failed to save return inspection image: " + orig, ex);
+            }
+        }
+
+        // 2. Run multi-angle visual condition scan on returned photos
         FinalConditionScanResponse returnedScan = conditionScanService.analyzeProductCondition(
                 resource.getItemName(),
                 resource.getCategory(),
@@ -108,22 +160,41 @@ public class ReturnService {
                 photos
         );
 
-        // Compare returned scan with original / current product condition
+        // 3. Compare returned scan with original / current product condition
         ConditionComparisonResult comparison = comparisonService.compareConditions(
                 resource.getConditionScan(),
                 returnedScan
         );
 
-        // Record AFTER_RETURN scan history
-        historyService.recordConditionHistory(resource, order, returnedScan, ConditionScanType.AFTER_RETURN);
+        // 4. Record AFTER_RETURN scan history with returned photos & assessor
+        historyService.recordConditionHistory(
+                resource,
+                order,
+                returnedScan,
+                ConditionScanType.AFTER_RETURN,
+                returnedImageUrls,
+                owner,
+                false,
+                "Return inspection scan for order #" + orderId
+        );
 
-        // Update Order status to RETURN_INSPECTION_PENDING
+        // 5. Update Order status to RETURN_INSPECTION_PENDING
         order.setStatus(OrderStatus.RETURN_INSPECTION_PENDING);
         orderRepository.save(order);
 
+        List<String> originalImages = (resource.getImages() != null) ?
+                resource.getImages().stream().map(ResourceImage::getImageUrl).collect(Collectors.toList()) :
+                new ArrayList<>();
+
         System.out.println("🔍 [Return Inspected] Order ID: " + orderId + " | Score Diff: " + comparison.getScoreDifference() + " | New Issues: " + comparison.getNewIssuesDetected());
 
-        return new ReturnInspectionResponse(orderService.mapToResponse(order), returnedScan, comparison);
+        return new ReturnInspectionResponse(
+                orderService.mapToResponse(order),
+                returnedScan,
+                comparison,
+                originalImages,
+                returnedImageUrls
+        );
     }
 
     /**
@@ -209,8 +280,11 @@ public class ReturnService {
         }
 
         OrderStatus currentStatus = order.getStatus();
-        if (currentStatus == OrderStatus.DAMAGE_REPORTED || currentStatus == OrderStatus.RETURNED) {
+        if (currentStatus == OrderStatus.DAMAGE_REPORTED || currentStatus == OrderStatus.RETURNED || currentStatus == OrderStatus.RETURN_CONFIRMED) {
             throw new BadRequestException("Return inspection has already been finalized for this order.");
+        }
+        if (currentStatus != OrderStatus.RETURN_REQUESTED && currentStatus != OrderStatus.RETURN_INSPECTION_PENDING) {
+            throw new BadRequestException("Damage can only be reported for orders undergoing return inspection. Current status: " + currentStatus);
         }
 
         Resource resource = order.getResource();

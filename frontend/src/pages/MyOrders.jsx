@@ -23,6 +23,7 @@ const STATUS_FILTERS = [
 
 export const MyOrders = ({ 
   initialTab = 'my-requests', 
+  onTabChange,
   onNavigateToHome, 
   onNavigateToGiveForRent,
   onNavigateToReturnInspect 
@@ -177,6 +178,14 @@ export const MyOrders = ({
     }
   };
 
+  const handleTabSwitch = (newTab) => {
+    setActiveTab(newTab);
+    setStatusFilter('ALL');
+    if (onTabChange) {
+      onTabChange(newTab);
+    }
+  };
+
   // Filter orders according to active tab and status pill
   const currentList = activeTab === 'my-requests' ? myOrders : receivedOrders;
   const filteredList = currentList.filter((order) => {
@@ -239,10 +248,7 @@ export const MyOrders = ({
         
         {/* Tab 1: My Requests */}
         <button
-          onClick={() => {
-            setActiveTab('my-requests');
-            setStatusFilter('ALL');
-          }}
+          onClick={() => handleTabSwitch('my-requests')}
           className={`flex items-center gap-2 pb-4 text-sm font-bold border-b-2 transition-all ${
             activeTab === 'my-requests'
               ? 'border-brand-400 text-brand-300'
@@ -258,10 +264,7 @@ export const MyOrders = ({
 
         {/* Tab 2: Requests Received */}
         <button
-          onClick={() => {
-            setActiveTab('requests-received');
-            setStatusFilter('ALL');
-          }}
+          onClick={() => handleTabSwitch('requests-received')}
           className={`flex items-center gap-2 pb-4 text-sm font-bold border-b-2 transition-all ${
             activeTab === 'requests-received'
               ? 'border-brand-400 text-brand-300'

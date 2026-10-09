@@ -2,7 +2,7 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { 
   ShieldCheck, PhoneCall, Sparkles, LogOut, RefreshCw, 
-  PackagePlus, Home, ShoppingBag, Package, User 
+  PackagePlus, Home, ShoppingBag, Package, User, Inbox 
 } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 
@@ -75,10 +75,24 @@ export const Navbar = ({ currentView, onNavigate, onNavigateToOrdersTab }) => {
                     ? 'bg-brand-500/20 border-brand-400 text-brand-300'
                     : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white'
                 }`}
-                title="View your rental requests and received orders"
+                title="View your rental requests and order history"
               >
                 <ShoppingBag className="w-4 h-4 text-brand-400" />
                 <span className="hidden md:inline">My Orders</span>
+              </button>
+
+              {/* Requests Received Button */}
+              <button
+                onClick={() => onNavigate('received-requests')}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
+                  currentView === 'received-requests' || currentView === 'return-inspect'
+                    ? 'bg-purple-500/20 border-purple-400 text-purple-300'
+                    : 'bg-slate-900 border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white'
+                }`}
+                title="View rental and return requests received for your products"
+              >
+                <Inbox className="w-4 h-4 text-purple-400" />
+                <span className="hidden lg:inline">Requests Received</span>
               </button>
 
               {/* + Give for Rent Button */}
@@ -103,7 +117,10 @@ export const Navbar = ({ currentView, onNavigate, onNavigateToOrdersTab }) => {
               )}
 
               {/* In-App Notification Bell */}
-              <NotificationBell onNavigateToOrdersTab={onNavigateToOrdersTab} />
+              <NotificationBell 
+                onNavigateToOrdersTab={onNavigateToOrdersTab} 
+                onNavigateToNotifications={() => onNavigate('notifications')} 
+              />
 
               {/* User Profile Button / Chip */}
               <button

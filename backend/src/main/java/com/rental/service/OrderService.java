@@ -403,6 +403,8 @@ public class OrderService {
             dto.setResourceId(order.getResource().getId());
             dto.setItemName(order.getResource().getItemName());
             dto.setCategory(order.getResource().getCategory());
+            dto.setResourceAvailableQuantity(order.getResource().getAvailableQuantity());
+            dto.setResourceTotalQuantity(order.getResource().getTotalQuantity());
 
             if (order.getResource().getImages() != null && !order.getResource().getImages().isEmpty()) {
                 dto.setFirstImageUrl(order.getResource().getImages().get(0).getImageUrl());

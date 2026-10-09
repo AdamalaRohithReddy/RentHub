@@ -1,11 +1,12 @@
 import React from 'react';
-import { Package, ShoppingBag, Inbox, PlusCircle, Bell, ArrowRight } from 'lucide-react';
+import { Package, ShoppingBag, Inbox, PlusCircle, Bell, ArrowRight, Edit3 } from 'lucide-react';
 
 export const ProfileQuickActions = ({ 
   onNavigateToMyProducts, 
   onNavigateToMyOrders, 
   onNavigateToRequestsReceived, 
   onNavigateToGiveForRent,
+  onNavigateToEditProfile,
   onOpenNotifications 
 }) => {
   const actions = [
@@ -41,6 +42,22 @@ export const ProfileQuickActions = ({
       gradient: 'hover:border-brand-500/40 hover:bg-brand-500/5',
       badge: '+ Earn',
     },
+    {
+      title: 'Edit Profile',
+      subtitle: 'Update name, contact address & avatar photo',
+      icon: <Edit3 className="w-5 h-5 text-teal-400" />,
+      onClick: onNavigateToEditProfile,
+      gradient: 'hover:border-teal-500/40 hover:bg-teal-500/5',
+      badge: 'Account',
+    },
+    {
+      title: 'Notifications',
+      subtitle: 'View booking alerts, returns & system updates',
+      icon: <Bell className="w-5 h-5 text-amber-400" />,
+      onClick: onOpenNotifications,
+      gradient: 'hover:border-amber-500/40 hover:bg-amber-500/5',
+      badge: 'Alerts',
+    },
   ];
 
   return (
@@ -52,7 +69,7 @@ export const ProfileQuickActions = ({
         <span className="text-[11px] text-slate-500">Shortcuts</span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {actions.map((act, idx) => (
           <button
             key={idx}

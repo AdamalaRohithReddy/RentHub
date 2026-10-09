@@ -10,7 +10,10 @@ import com.rental.entity.ProductConditionScan;
 import com.rental.entity.Resource;
 import com.rental.entity.ResourceImage;
 import com.rental.entity.User;
+import com.rental.entity.enums.ConditionIssueType;
 import com.rental.entity.enums.ConditionScanType;
+import com.rental.entity.enums.ConditionStatus;
+import com.rental.entity.enums.IssueSeverity;
 import com.rental.entity.enums.OrderStatus;
 import com.rental.exception.BadRequestException;
 import com.rental.exception.ResourceNotFoundException;
@@ -92,6 +95,35 @@ public class ResourceService {
             String pickupMethod,
             String pickupLocation,
             List<MultipartFile> images
+    ) {
+        return createResource(userId, itemName, category, description, rentAmount, rentDurationUnit,
+                securityDeposit, availableQuantity, availableFrom, availableUntil, pickupMethod, pickupLocation,
+                images, null, null, null, null);
+    }
+
+    /**
+     * Creates and saves a new community rental resource with user-wise image folder storage
+     * and persists the product condition scan analysis & condition history with optional owner review adjustments.
+     */
+    @Transactional
+    public ResourceResponse createResource(
+            Long userId,
+            String itemName,
+            String category,
+            String description,
+            BigDecimal rentAmount,
+            String rentDurationUnit,
+            BigDecimal securityDeposit,
+            Integer availableQuantity,
+            LocalDate availableFrom,
+            LocalDate availableUntil,
+            String pickupMethod,
+            String pickupLocation,
+            List<MultipartFile> images,
+            String conditionStatus,
+            Integer conditionScore,
+            List<String> detectedIssues,
+            String ownerNotes
     ) {
         // 1. Fetch Logged-in User
         User user = userRepository.findById(userId)
@@ -200,8 +232,50 @@ public class ResourceService {
             FinalConditionScanResponse scanResult = conditionScanService.analyzeProductCondition(
                     itemName, category, description, images
             );
+
+            boolean isOverride = false;
+            if (StringUtils.hasText(conditionStatus)) {
+                try {
+                    scanResult.setConditionStatus(ConditionStatus.valueOf(conditionStatus.trim().toUpperCase()));
+                    isOverride = true;
+                } catch (IllegalArgumentException ignored) {}
+            }
+            if (conditionScore != null) {
+                scanResult.setConditionScore(conditionScore);
+                isOverride = true;
+            }
+            if (detectedIssues != null && !detectedIssues.isEmpty()) {
+                List<ConditionIssueResponse> issueResponses = new ArrayList<>();
+                for (String issueStr : detectedIssues) {
+                    try {
+                        ConditionIssueType it = ConditionIssueType.valueOf(issueStr.trim().toUpperCase());
+                        issueResponses.add(new ConditionIssueResponse(it, IssueSeverity.MEDIUM, it.name().replace("_", " ")));
+                    } catch (IllegalArgumentException ignored) {}
+                }
+                if (!issueResponses.isEmpty()) {
+                    scanResult.setIssues(issueResponses);
+                    scanResult.setHasDamage(issueResponses.stream().anyMatch(i -> i.getIssueType() != ConditionIssueType.NO_MAJOR_DAMAGE));
+                    isOverride = true;
+                }
+            }
+
             conditionScanService.saveConditionScan(savedResource, scanResult);
-            conditionHistoryService.recordConditionHistory(savedResource, null, scanResult, ConditionScanType.INITIAL_LISTING);
+
+            // Collect saved image URLs for history
+            List<String> imageUrls = savedResource.getImages().stream()
+                    .map(ResourceImage::getImageUrl)
+                    .collect(Collectors.toList());
+
+            conditionHistoryService.recordConditionHistory(
+                    savedResource,
+                    null,
+                    scanResult,
+                    ConditionScanType.INITIAL_LISTING,
+                    imageUrls,
+                    user,
+                    isOverride,
+                    ownerNotes
+            );
         } catch (Exception ex) {
             System.err.println("⚠️ Could not generate condition scan automatically: " + ex.getMessage());
         }

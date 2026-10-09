@@ -258,6 +258,102 @@ export const ReturnInspection = ({ orderId, onBack, onComplete }) => {
                 </div>
               ) : inspectionResult ? (
                 <div className="space-y-4">
+                  {/* Side-by-Side Photo Comparison Gallery */}
+                  <div className="glass-panel p-6 rounded-3xl border border-slate-800 space-y-4">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-brand-400" />
+                        <span>Side-by-Side Visual Comparison (Original vs Returned)</span>
+                      </h3>
+                      <span className="text-[11px] text-slate-400">Comparing listing baseline with returned camera captures</span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Original Listing Photos Column */}
+                      <div className="space-y-3 p-4 rounded-2xl bg-slate-900/60 border border-slate-800">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                            Original Listing Photos ({inspectionResult.originalImages?.length || 0})
+                          </span>
+                          <span className="text-[10px] text-emerald-400 font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30">
+                            Baseline
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {inspectionResult.originalImages && inspectionResult.originalImages.length > 0 ? (
+                            inspectionResult.originalImages.map((imgUrl, idx) => (
+                              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-slate-700 bg-slate-950 group">
+                                <img
+                                  src={imgUrl}
+                                  alt={`Original ${idx + 1}`}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  onError={(e) => {
+                                    e.currentTarget.src = 'https://images.unsplash.com/photo-1581244277943-fe4a9c777189?w=300';
+                                  }}
+                                />
+                                <span className="absolute bottom-1 left-1 bg-black/80 backdrop-blur-sm text-[9px] font-mono text-white px-1.5 py-0.5 rounded">
+                                  Angle #{idx + 1}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="col-span-full py-6 text-center text-xs text-slate-500 italic">
+                              No original photos found on record
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Returned Product Photos Column */}
+                      <div className="space-y-3 p-4 rounded-2xl bg-slate-900/60 border border-brand-500/30">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                            Returned Photos ({inspectionResult.returnedImages?.length || capturedPhotos.length || 0})
+                          </span>
+                          <span className="text-[10px] text-brand-400 font-mono px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30">
+                            Current Return
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                          {inspectionResult.returnedImages && inspectionResult.returnedImages.length > 0 ? (
+                            inspectionResult.returnedImages.map((imgUrl, idx) => (
+                              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-brand-500/30 bg-slate-950 group">
+                                <img
+                                  src={imgUrl}
+                                  alt={`Returned ${idx + 1}`}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  onError={(e) => {
+                                    if (capturedPhotos[idx]?.previewUrl) {
+                                      e.currentTarget.src = capturedPhotos[idx].previewUrl;
+                                    }
+                                  }}
+                                />
+                                <span className="absolute bottom-1 left-1 bg-black/80 backdrop-blur-sm text-[9px] font-mono text-brand-300 px-1.5 py-0.5 rounded">
+                                  Return #{idx + 1}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            capturedPhotos.map((photo, idx) => (
+                              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border border-brand-500/30 bg-slate-950 group">
+                                <img
+                                  src={photo.previewUrl}
+                                  alt={`Captured ${idx + 1}`}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                                <span className="absolute bottom-1 left-1 bg-black/80 backdrop-blur-sm text-[9px] font-mono text-brand-300 px-1.5 py-0.5 rounded">
+                                  {photo.angle || `Angle #${idx + 1}`}
+                                </span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   <ConditionComparison comparison={inspectionResult.comparison} />
                   
                   <FinalConditionReport

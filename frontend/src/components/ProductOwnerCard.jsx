@@ -1,10 +1,17 @@
 import React from 'react';
 import { 
   Package, Tag, IndianRupee, Layers, ShieldCheck, 
-  Edit3, ListOrdered, AlertTriangle, CheckCircle2, Image as ImageIcon 
+  Edit3, ListOrdered, AlertTriangle, CheckCircle2, Image as ImageIcon,
+  Eye, History, ShieldAlert
 } from 'lucide-react';
 
-export const ProductOwnerCard = ({ product, onEdit, onViewOrders }) => {
+export const ProductOwnerCard = ({ 
+  product, 
+  onViewDetails, 
+  onEdit, 
+  onViewOrders, 
+  onViewConditionHistory 
+}) => {
   if (!product) return null;
 
   const firstImage = (product.images && product.images.length > 0)
@@ -63,14 +70,15 @@ export const ProductOwnerCard = ({ product, onEdit, onViewOrders }) => {
         </div>
 
         {product.conditionScan && (
-          <div className="absolute top-2.5 right-2.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-900/90 text-brand-300 border border-brand-500/30 backdrop-blur-sm">
-            AI Condition: {conditionStatus} ({conditionScore}/100)
+          <div className="absolute top-2.5 right-2.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-900/90 text-brand-300 border border-brand-500/30 backdrop-blur-sm flex items-center gap-1 shadow-sm">
+            <ShieldCheck className="w-3 h-3 text-brand-400" />
+            <span>AI: {conditionStatus} ({conditionScore}/100)</span>
           </div>
         )}
       </div>
 
       {/* Product Details */}
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-start justify-between gap-2">
           <div>
             <span className="text-[11px] font-semibold text-brand-400 uppercase tracking-wider block">
@@ -81,7 +89,7 @@ export const ProductOwnerCard = ({ product, onEdit, onViewOrders }) => {
             </h3>
           </div>
           
-          <div className="text-right">
+          <div className="text-right flex-shrink-0">
             <span className="text-lg font-black text-white font-mono">
               ₹{product.rentAmount}
             </span>
@@ -95,10 +103,18 @@ export const ProductOwnerCard = ({ product, onEdit, onViewOrders }) => {
           {product.description}
         </p>
 
+        {/* Pricing & Deposit Overview */}
+        <div className="flex items-center justify-between text-xs py-1.5 px-3 rounded-xl bg-slate-900/60 border border-slate-800/80">
+          <span className="text-slate-400">Security Deposit:</span>
+          <strong className="text-slate-200 font-mono">
+            {product.securityDeposit ? `₹${product.securityDeposit}` : '₹0 (None)'}
+          </strong>
+        </div>
+
         {/* Quantities Table Grid */}
         <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 text-center text-xs">
           <div>
-            <span className="text-[10px] text-slate-400 block uppercase">Total</span>
+            <span className="text-[10px] text-slate-400 block uppercase">Total Units</span>
             <strong className="text-white font-mono text-sm">{totalQty}</strong>
           </div>
           <div>
@@ -106,31 +122,65 @@ export const ProductOwnerCard = ({ product, onEdit, onViewOrders }) => {
             <strong className="text-emerald-300 font-mono text-sm">{availQty}</strong>
           </div>
           <div>
-            <span className="text-[10px] text-amber-400 block uppercase">Rented</span>
+            <span className="text-[10px] text-amber-400 block uppercase">Rented Out</span>
             <strong className="text-amber-300 font-mono text-sm">{rentedQty}</strong>
           </div>
         </div>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
-        <button
-          type="button"
-          onClick={() => onEdit(product.id)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-bold transition-all"
-        >
-          <Edit3 className="w-3.5 h-3.5" />
-          <span>EDIT PRODUCT</span>
-        </button>
+      {/* Action Buttons: View Details, Edit Product, View Orders, Condition History */}
+      <div className="space-y-2 pt-2 border-t border-slate-800">
+        <div className="grid grid-cols-2 gap-2">
+          {onViewDetails && (
+            <button
+              type="button"
+              onClick={() => onViewDetails(product.id)}
+              className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 hover:text-white text-xs font-semibold transition-all"
+              title="View product public details"
+            >
+              <Eye className="w-3.5 h-3.5 text-slate-400" />
+              <span>View Details</span>
+            </button>
+          )}
 
-        <button
-          type="button"
-          onClick={() => onViewOrders(product.id)}
-          className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 text-brand-300 hover:text-white text-xs font-bold transition-all"
-        >
-          <ListOrdered className="w-3.5 h-3.5" />
-          <span>VIEW ORDERS</span>
-        </button>
+          {onEdit && (
+            <button
+              type="button"
+              onClick={() => onEdit(product.id)}
+              className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-brand-300 hover:text-white text-xs font-semibold transition-all"
+              title="Edit product pricing, quantity & photos"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-brand-400" />
+              <span>Edit Product</span>
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {onViewOrders && (
+            <button
+              type="button"
+              onClick={() => onViewOrders(product.id)}
+              className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-brand-500/10 hover:bg-brand-500/20 border border-brand-500/30 text-brand-300 hover:text-white text-xs font-semibold transition-all"
+              title="View rental orders for this product"
+            >
+              <ListOrdered className="w-3.5 h-3.5" />
+              <span>View Orders</span>
+            </button>
+          )}
+
+          {onViewConditionHistory && (
+            <button
+              type="button"
+              onClick={() => onViewConditionHistory(product.id)}
+              className="flex items-center justify-center gap-1.5 py-2 px-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 hover:text-white text-xs font-semibold transition-all"
+              title="View AI visual condition scan history"
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>Scan History</span>
+            </button>
+          )}
+        </div>
       </div>
 
     </div>

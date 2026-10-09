@@ -67,6 +67,7 @@ export const GiveForRent = ({ onNavigateToHome }) => {
   // Step 4 & 5: Combined Final Condition Scan State
   const [isFinalScanning, setIsFinalScanning] = useState(false);
   const [finalScanResult, setFinalScanResult] = useState(null);
+  const [adjustedCondition, setAdjustedCondition] = useState(null);
 
   // Step 6: Vendor Verification Checklist State
   const [isVendorVerified, setIsVendorVerified] = useState(false);
@@ -211,6 +212,23 @@ export const GiveForRent = ({ onNavigateToHome }) => {
           formData.append('images', p.file);
         }
       });
+
+      if (adjustedCondition) {
+        if (adjustedCondition.conditionStatus) {
+          formData.append('conditionStatus', adjustedCondition.conditionStatus);
+        }
+        if (adjustedCondition.conditionScore != null) {
+          formData.append('conditionScore', String(adjustedCondition.conditionScore));
+        }
+        if (adjustedCondition.detectedIssues && adjustedCondition.detectedIssues.length > 0) {
+          adjustedCondition.detectedIssues.forEach((issue) => {
+            formData.append('detectedIssues', issue);
+          });
+        }
+        if (adjustedCondition.ownerNotes) {
+          formData.append('ownerNotes', adjustedCondition.ownerNotes.trim());
+        }
+      }
 
       const saved = await resourceService.createResource(formData);
 
@@ -564,6 +582,7 @@ export const GiveForRent = ({ onNavigateToHome }) => {
                   scanResult={finalScanResult}
                   itemName={itemName || 'Product'}
                   onRescan={() => runCombinedFinalScan(capturedPhotos)}
+                  onConditionAdjusted={(adj) => setAdjustedCondition(adj)}
                 />
               )
             )}

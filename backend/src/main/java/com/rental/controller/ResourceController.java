@@ -50,6 +50,10 @@ public class ResourceController {
             @RequestParam("pickupMethod") String pickupMethod,
             @RequestParam("pickupLocation") String pickupLocation,
             @RequestParam("images") List<MultipartFile> images,
+            @RequestParam(value = "conditionStatus", required = false) String conditionStatus,
+            @RequestParam(value = "conditionScore", required = false) Integer conditionScore,
+            @RequestParam(value = "detectedIssues", required = false) List<String> detectedIssues,
+            @RequestParam(value = "ownerNotes", required = false) String ownerNotes,
             @AuthenticationPrincipal UserPrincipal currentUser
     ) {
         if (currentUser == null) {
@@ -69,7 +73,11 @@ public class ResourceController {
                 availableUntil,
                 pickupMethod,
                 pickupLocation,
-                images
+                images,
+                conditionStatus,
+                conditionScore,
+                detectedIssues,
+                ownerNotes
         );
 
         return new ResponseEntity<>(response, HttpStatus.CREATED);

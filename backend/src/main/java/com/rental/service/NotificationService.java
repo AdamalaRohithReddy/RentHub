@@ -30,6 +30,15 @@ public class NotificationService {
             return null;
         }
 
+        // Prevent duplicate notification when an action is retried
+        if (order != null && order.getId() != null) {
+            if (notificationRepository.existsByUserIdAndOrderIdAndType(recipient.getId(), order.getId(), type)) {
+                System.out.println("⚠️ [Duplicate Notification Prevented] User: " + recipient.getId() + 
+                                   " | Order: " + order.getId() + " | Type: " + type);
+                return notificationRepository.findFirstByUserIdAndOrderIdAndType(recipient.getId(), order.getId(), type).orElse(null);
+            }
+        }
+
         Notification notification = new Notification(recipient, order, title, message, type);
         Notification saved = notificationRepository.save(notification);
         System.out.println("🔔 [Notification Created] For: " + recipient.getFullName() + 
@@ -72,6 +81,18 @@ public class NotificationService {
             notification.setIsRead(true);
         }
         notificationRepository.saveAll(unreadNotifications);
+    }
+
+    @Transactional
+    public void deleteNotification(Long notificationId, Long userId) {
+        Notification notification = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new ResourceNotFoundException("Notification not found with id: " + notificationId));
+
+        if (!notification.getUser().getId().equals(userId)) {
+            throw new BadRequestException("You are not authorized to delete this notification.");
+        }
+
+        notificationRepository.delete(notification);
     }
 
     private NotificationResponse mapToResponse(Notification n) {

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Register } from './pages/Register';
@@ -12,51 +13,131 @@ import { EditProduct } from './pages/EditProduct';
 import { ReturnInspection } from './pages/ReturnInspection';
 import { Profile } from './pages/Profile';
 import { EditProfile } from './pages/EditProfile';
+import { Notifications } from './pages/Notifications';
+
+// Helper component to extract :id param for ProductDetails
+const ProductDetailsWrapper = ({ onNavigateBack, onNavigateToMyOrders, onNavigateToLogin }) => {
+  const { id } = useParams();
+  return (
+    <ProductDetails
+      productId={id ? Number(id) : null}
+      onNavigateBack={onNavigateBack}
+      onNavigateToMyOrders={onNavigateToMyOrders}
+      onNavigateToLogin={onNavigateToLogin}
+    />
+  );
+};
+
+// Helper component to extract :id param for EditProduct
+const EditProductWrapper = ({ onBack, onSaved }) => {
+  const { id } = useParams();
+  return (
+    <EditProduct
+      productId={id ? Number(id) : null}
+      onBack={onBack}
+      onSaved={onSaved}
+    />
+  );
+};
+
+// Helper component to extract :orderId param for ReturnInspection
+const ReturnInspectionWrapper = ({ onBack, onComplete }) => {
+  const { orderId } = useParams();
+  return (
+    <ReturnInspection
+      orderId={orderId ? Number(orderId) : null}
+      onBack={onBack}
+      onComplete={onComplete}
+    />
+  );
+};
 
 const AppContent = () => {
   const { isAuthenticated, isLoading } = useAuth();
-  const [currentView, setCurrentView] = useState('home');
-  const [selectedProductId, setSelectedProductId] = useState(null);
-  const [editingProductId, setEditingProductId] = useState(null);
-  const [inspectingOrderId, setInspectingOrderId] = useState(null);
-  const [ordersInitialTab, setOrdersInitialTab] = useState('my-requests');
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  useEffect(() => {
-    if (!isLoading) {
-      if (isAuthenticated) {
-        if (currentView === 'login' || currentView === 'register') {
-          setCurrentView('home');
-        }
-      } else {
-        if (currentView !== 'login' && currentView !== 'register' && currentView !== 'home' && currentView !== 'product-details') {
-          setCurrentView('login');
-        }
-      }
+  // Determine currentView string from pathname for Navbar highlighting
+  const getComputedCurrentView = () => {
+    const path = location.pathname;
+    if (path === '/' || path === '/home') return 'home';
+    if (path.startsWith('/login')) return 'login';
+    if (path.startsWith('/register')) return 'register';
+    if (path === '/profile') return 'profile';
+    if (path === '/edit-profile') return 'edit-profile';
+    if (path === '/my-products') return 'my-products';
+    if (path.startsWith('/edit-product')) return 'edit-product';
+    if (path.startsWith('/products') || path.startsWith('/product-details')) return 'product-details';
+    if (path === '/give-for-rent') return 'give-for-rent';
+    if (path === '/my-orders') return 'my-orders';
+    if (path === '/received-requests') return 'received-requests';
+    if (path === '/notifications') return 'notifications';
+    if (path.startsWith('/return-inspect')) return 'return-inspect';
+    return 'home';
+  };
+
+  const currentView = getComputedCurrentView();
+
+  const handleNavigate = (view) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    switch (view) {
+      case 'home':
+        navigate('/');
+        break;
+      case 'login':
+        navigate('/login');
+        break;
+      case 'register':
+        navigate('/register');
+        break;
+      case 'profile':
+        navigate('/profile');
+        break;
+      case 'edit-profile':
+        navigate('/edit-profile');
+        break;
+      case 'my-products':
+        navigate('/my-products');
+        break;
+      case 'give-for-rent':
+        navigate('/give-for-rent');
+        break;
+      case 'my-orders':
+        navigate('/my-orders');
+        break;
+      case 'received-requests':
+        navigate('/received-requests');
+        break;
+      case 'notifications':
+        navigate('/notifications');
+        break;
+      default:
+        navigate('/');
     }
-  }, [isAuthenticated, isLoading]);
+  };
 
   const handleSelectProduct = (productId) => {
-    setSelectedProductId(productId);
-    setCurrentView('product-details');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigate(`/products/${productId}`);
   };
 
   const handleNavigateToOrdersTab = (tabName = 'my-requests') => {
-    setOrdersInitialTab(tabName);
-    setCurrentView('my-orders');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (tabName === 'requests-received') {
+      navigate('/received-requests');
+    } else {
+      navigate('/my-orders');
+    }
   };
 
   const handleNavigateToEditProduct = (productId) => {
-    setEditingProductId(productId);
-    setCurrentView('edit-product');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigate(`/edit-product/${productId}`);
   };
 
   const handleNavigateToReturnInspect = (orderId) => {
-    setInspectingOrderId(orderId);
-    setCurrentView('return-inspect');
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    navigate(`/return-inspect/${orderId}`);
   };
 
   if (isLoading) {
@@ -74,97 +155,227 @@ const AppContent = () => {
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100 selection:bg-brand-500 selection:text-white">
       <Navbar 
         currentView={currentView} 
-        onNavigate={(view) => {
-          setCurrentView(view);
-          window.scrollTo({ top: 0, behavior: 'smooth' });
-        }}
+        onNavigate={handleNavigate}
         onNavigateToOrdersTab={handleNavigateToOrdersTab}
       />
 
       <main className="flex-1">
-        {currentView === 'register' && (
-          <Register onNavigateToLogin={() => setCurrentView('login')} />
-        )}
-
-        {currentView === 'login' && (
-          <Login
-            onNavigateToRegister={() => setCurrentView('register')}
-            onLoginSuccess={() => setCurrentView('home')}
+        <Routes>
+          {/* Public Routes */}
+          <Route 
+            path="/" 
+            element={
+              <Home 
+                onNavigateToGiveForRent={() => handleNavigate('give-for-rent')}
+                onSelectProduct={handleSelectProduct}
+              />
+            } 
           />
-        )}
-
-        {currentView === 'home' && (
-          <Home 
-            onNavigateToGiveForRent={() => setCurrentView('give-for-rent')}
-            onSelectProduct={handleSelectProduct}
+          <Route 
+            path="/home" 
+            element={
+              <Home 
+                onNavigateToGiveForRent={() => handleNavigate('give-for-rent')}
+                onSelectProduct={handleSelectProduct}
+              />
+            } 
           />
-        )}
 
-        {currentView === 'product-details' && (
-          <ProductDetails
-            productId={selectedProductId}
-            onNavigateBack={() => setCurrentView('home')}
-            onNavigateToMyOrders={() => handleNavigateToOrdersTab('my-requests')}
-            onNavigateToLogin={() => setCurrentView('login')}
+          <Route 
+            path="/login" 
+            element={
+              isAuthenticated ? (
+                <Navigate to="/" replace />
+              ) : (
+                <Login
+                  onNavigateToRegister={() => handleNavigate('register')}
+                  onLoginSuccess={() => handleNavigate('home')}
+                />
+              )
+            } 
           />
-        )}
 
-        {currentView === 'give-for-rent' && (
-          <GiveForRent onNavigateToHome={() => setCurrentView('home')} />
-        )}
-
-        {currentView === 'my-products' && (
-          <MyProducts
-            onNavigateToHome={() => setCurrentView('home')}
-            onNavigateToGiveForRent={() => setCurrentView('give-for-rent')}
-            onNavigateToEdit={handleNavigateToEditProduct}
-            onNavigateToOrders={() => handleNavigateToOrdersTab('requests-received')}
+          <Route 
+            path="/register" 
+            element={
+              isAuthenticated ? (
+                <Navigate to="/" replace />
+              ) : (
+                <Register onNavigateToLogin={() => handleNavigate('login')} />
+              )
+            } 
           />
-        )}
 
-        {currentView === 'edit-product' && (
-          <EditProduct
-            productId={editingProductId}
-            onBack={() => setCurrentView('my-products')}
-            onSaved={() => setCurrentView('my-products')}
+          <Route 
+            path="/products/:id" 
+            element={
+              <ProductDetailsWrapper
+                onNavigateBack={() => handleNavigate('home')}
+                onNavigateToMyOrders={() => handleNavigateToOrdersTab('my-requests')}
+                onNavigateToLogin={() => handleNavigate('login')}
+              />
+            } 
           />
-        )}
+          <Route 
+            path="/product-details/:id" 
+            element={
+              <ProductDetailsWrapper
+                onNavigateBack={() => handleNavigate('home')}
+                onNavigateToMyOrders={() => handleNavigateToOrdersTab('my-requests')}
+                onNavigateToLogin={() => handleNavigate('login')}
+              />
+            } 
+          />
 
-        {currentView === 'return-inspect' && (
-          <ReturnInspection
-            orderId={inspectingOrderId}
-            onBack={() => handleNavigateToOrdersTab('requests-received')}
-            onComplete={() => handleNavigateToOrdersTab('requests-received')}
+          {/* Protected Routes: Profile & Edit Profile */}
+          <Route 
+            path="/profile" 
+            element={
+              isAuthenticated ? (
+                <Profile
+                  onNavigateToHome={() => handleNavigate('home')}
+                  onNavigateToEdit={() => handleNavigate('edit-profile')}
+                  onNavigateToMyProducts={() => handleNavigate('my-products')}
+                  onNavigateToMyOrders={() => handleNavigateToOrdersTab('my-requests')}
+                  onNavigateToRequestsReceived={() => handleNavigateToOrdersTab('requests-received')}
+                  onNavigateToGiveForRent={() => handleNavigate('give-for-rent')}
+                  onNavigateToNotifications={() => handleNavigate('notifications')}
+                  onNavigateToLogin={() => handleNavigate('login')}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
           />
-        )}
 
-        {currentView === 'my-orders' && (
-          <MyOrders
-            initialTab={ordersInitialTab}
-            onNavigateToHome={() => setCurrentView('home')}
-            onNavigateToGiveForRent={() => setCurrentView('give-for-rent')}
-            onNavigateToReturnInspect={handleNavigateToReturnInspect}
+          <Route 
+            path="/edit-profile" 
+            element={
+              isAuthenticated ? (
+                <EditProfile
+                  onBack={() => handleNavigate('profile')}
+                  onSaved={() => handleNavigate('profile')}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
           />
-        )}
 
-        {currentView === 'profile' && (
-          <Profile
-            onNavigateToHome={() => setCurrentView('home')}
-            onNavigateToEdit={() => setCurrentView('edit-profile')}
-            onNavigateToMyProducts={() => setCurrentView('my-products')}
-            onNavigateToMyOrders={() => handleNavigateToOrdersTab('my-requests')}
-            onNavigateToRequestsReceived={() => handleNavigateToOrdersTab('requests-received')}
-            onNavigateToGiveForRent={() => setCurrentView('give-for-rent')}
-            onNavigateToLogin={() => setCurrentView('login')}
+          {/* Protected Routes: My Products & Edit Product */}
+          <Route 
+            path="/my-products" 
+            element={
+              isAuthenticated ? (
+                <MyProducts
+                  onNavigateToHome={() => handleNavigate('home')}
+                  onNavigateToGiveForRent={() => handleNavigate('give-for-rent')}
+                  onNavigateToEdit={handleNavigateToEditProduct}
+                  onNavigateToOrders={() => handleNavigateToOrdersTab('requests-received')}
+                  onSelectProduct={handleSelectProduct}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
           />
-        )}
 
-        {currentView === 'edit-profile' && (
-          <EditProfile
-            onBack={() => setCurrentView('profile')}
-            onSaved={() => setCurrentView('profile')}
+          <Route 
+            path="/edit-product/:id" 
+            element={
+              isAuthenticated ? (
+                <EditProductWrapper
+                  onBack={() => handleNavigate('my-products')}
+                  onSaved={() => handleNavigate('my-products')}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
           />
-        )}
+
+          {/* Protected Routes: Give For Rent, Orders, and Return Inspection */}
+          <Route 
+            path="/give-for-rent" 
+            element={
+              isAuthenticated ? (
+                <GiveForRent onNavigateToHome={() => handleNavigate('home')} />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+
+          <Route 
+            path="/my-orders" 
+            element={
+              isAuthenticated ? (
+                <MyOrders
+                  initialTab="my-requests"
+                  onTabChange={(tab) => {
+                    if (tab === 'requests-received') navigate('/received-requests');
+                  }}
+                  onNavigateToHome={() => handleNavigate('home')}
+                  onNavigateToGiveForRent={() => handleNavigate('give-for-rent')}
+                  onNavigateToReturnInspect={handleNavigateToReturnInspect}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+
+          <Route 
+            path="/received-requests" 
+            element={
+              isAuthenticated ? (
+                <MyOrders
+                  initialTab="requests-received"
+                  onTabChange={(tab) => {
+                    if (tab === 'my-requests') navigate('/my-orders');
+                  }}
+                  onNavigateToHome={() => handleNavigate('home')}
+                  onNavigateToGiveForRent={() => handleNavigate('give-for-rent')}
+                  onNavigateToReturnInspect={handleNavigateToReturnInspect}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+
+          <Route 
+            path="/return-inspect/:orderId" 
+            element={
+              isAuthenticated ? (
+                <ReturnInspectionWrapper
+                  onBack={() => handleNavigateToOrdersTab('requests-received')}
+                  onComplete={() => handleNavigateToOrdersTab('requests-received')}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+
+          <Route 
+            path="/notifications" 
+            element={
+              isAuthenticated ? (
+                <Notifications
+                  onNavigateToHome={() => handleNavigate('home')}
+                  onNavigateToOrdersTab={handleNavigateToOrdersTab}
+                  onNavigateToReturnInspect={handleNavigateToReturnInspect}
+                />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+
+          {/* Catch-all redirect to Home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </main>
 
       <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
@@ -184,9 +395,11 @@ const AppContent = () => {
 
 export function App() {
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <BrowserRouter>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </BrowserRouter>
   );
 }
 

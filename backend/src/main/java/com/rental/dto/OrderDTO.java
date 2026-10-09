@@ -68,6 +68,8 @@ public class OrderDTO {
         private String itemName;
         private String category;
         private String firstImageUrl;
+        private Integer resourceAvailableQuantity;
+        private Integer resourceTotalQuantity;
         
         private Long customerId;
         private String customerName;
@@ -102,6 +104,12 @@ public class OrderDTO {
 
         public String getFirstImageUrl() { return firstImageUrl; }
         public void setFirstImageUrl(String firstImageUrl) { this.firstImageUrl = firstImageUrl; }
+
+        public Integer getResourceAvailableQuantity() { return resourceAvailableQuantity; }
+        public void setResourceAvailableQuantity(Integer resourceAvailableQuantity) { this.resourceAvailableQuantity = resourceAvailableQuantity; }
+
+        public Integer getResourceTotalQuantity() { return resourceTotalQuantity; }
+        public void setResourceTotalQuantity(Integer resourceTotalQuantity) { this.resourceTotalQuantity = resourceTotalQuantity; }
 
         public Long getCustomerId() { return customerId; }
         public void setCustomerId(Long customerId) { this.customerId = customerId; }
@@ -156,12 +164,22 @@ public class OrderDTO {
         private OrderResponse order;
         private FinalConditionScanResponse returnedScan;
         private ConditionComparisonResult comparison;
+        private List<String> originalImages;
+        private List<String> returnedImages;
 
         public ReturnInspectionResponse() {}
         public ReturnInspectionResponse(OrderResponse order, FinalConditionScanResponse returnedScan, ConditionComparisonResult comparison) {
             this.order = order;
             this.returnedScan = returnedScan;
             this.comparison = comparison;
+        }
+
+        public ReturnInspectionResponse(OrderResponse order, FinalConditionScanResponse returnedScan, 
+                                        ConditionComparisonResult comparison, List<String> originalImages, 
+                                        List<String> returnedImages) {
+            this(order, returnedScan, comparison);
+            this.originalImages = originalImages;
+            this.returnedImages = returnedImages;
         }
 
         public OrderResponse getOrder() { return order; }
@@ -172,6 +190,12 @@ public class OrderDTO {
 
         public ConditionComparisonResult getComparison() { return comparison; }
         public void setComparison(ConditionComparisonResult comparison) { this.comparison = comparison; }
+
+        public List<String> getOriginalImages() { return originalImages; }
+        public void setOriginalImages(List<String> originalImages) { this.originalImages = originalImages; }
+
+        public List<String> getReturnedImages() { return returnedImages; }
+        public void setReturnedImages(List<String> returnedImages) { this.returnedImages = returnedImages; }
     }
 
     public static class DamageReportResponse {
